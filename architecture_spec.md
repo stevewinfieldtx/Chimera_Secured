@@ -1,286 +1,351 @@
 # Chimera Secured — Target Architecture
 
-**Scope of this document.** What Chimera Secured looks like when the pilot-readiness gates clear. Not a description of current code; that's the `TrueWriting/` lab stack (experimental, XGBoost + Wave 2 features) and `TrueWriting/shield/` (production, 8-feature hand-weighted deviation scorer — currently unconnected to the lab gains). This document is the target both converge on.
+**Scope of this document.** What Chimera Secured looks like when the pilot-readiness gates clear. This is a fresh-build specification. The old scorer in `...documents\truewriting\` is reference material only — its design was flawed (per the Kimi AI review and the gaps identified in `pilot_readiness_plan.md`), and we are not porting it. The scoring approach is specified in `scoring_redesign.md`; this document covers the deployable architecture around it.
 
 **Three design commitments that override everything else:**
 
-1. **Sovereignty is architectural, not marketing.** The CPP is the only thing that leaves the customer tenant. Email bodies are scored in-place inside customer infrastructure and discarded after scoring. Every component below either respects this or isn't shipped.
-2. **Ensembles, not silver bullets.** No single detector has ever cleared the bar on the few-shot and high-fidelity tiers. The design is an ensemble of weak detectors composed Bayesianly by content category.
+1. **Sovereignty is architectural, not marketing.** Email bodies never leave the customer tenant — not to Anthropic-side infrastructure, not to our services on Railway, not even to a co-located service we control. The CPP — an abstract style fingerprint with no reconstructible content — is the only object that crosses the tenant boundary, and it crosses in one direction only (out of the tenant to TDE, and back into the tenant at scoring time). Every component below either respects this or isn't shipped.
+2. **Ensembles, not silver bullets.** No single detector has ever cleared the bar on the few-shot and high-fidelity attacker tiers. The design is an ensemble of seven detectors composed Bayesianly, with the DLP content-category output acting as a prior on the likelihood — so weak style signals on a lunch email and weak style signals on a wire-transfer email produce opposite verdicts by design.
 3. **Detection before enforcement.** Every component ships in log-only mode first, earns its way to warn mode, and only gets enforcement rights after sustained real-world calibration. This isn't slow — it's how you avoid the false-positive death spiral that kills every enterprise security tool.
 
 ---
 
-## The layered pipeline
+## The two halves of the system
 
-Every inbound (or internal) email flows through these layers in order. Each layer can short-circuit the pipeline or hand off to the next. All layers log their decisions to the audit trail.
+Chimera Secured has two deployment surfaces, and the boundary between them is load-bearing. Everything to the left of the boundary runs inside the customer tenant. Everything to the right runs on Railway under our control.
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Email arrives at Shield (via M365 Graph or SMTP hook)              │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  Layer 0 — Envelope & Address Bypass                                │
-│  Fast-path skip for mail that doesn't need scoring:                 │
-│    • Internal-to-internal (same tenant, both sides known)           │
-│    • Trusted-partner sender (allowlist managed at tenant level)     │
-│    • System-generated (Jira, DocuSign, Salesforce, etc.)            │
-│    • Replies inside a thread originated by the recipient            │
-│  → Bypassed mail: verdict = "allow", reason = "bypass/<rule>"       │
-│  → Non-bypassed mail continues to Layer 1                           │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  Layer 1 — Detector Ensemble                                        │
-│  Seven detectors, each emits probability ∈ [0,1] + confidence:      │
-│    D1. Stylometric distance (XGBoost + Wave2 features)              │
-│    D2. LLM-detector head (perplexity/burstiness, DetectGPT-style)   │
-│    D3. DLP / payload category (current dlp_scanner.py)              │
-│    D4. Ask-type novelty (has this sender ever asked this before?)   │
-│    D5. Recipient-conditional style (does sender write this way to   │
-│        this recipient specifically? current Wave2 RCP feature pack) │
-│    D6. Thread coherence (is this a plausible reply or a topic jump?)│
-│    D7. Metadata anomaly (send time, client, geo-IP, headers)        │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  Layer 2 — Bayesian Content-Conditional Composer                    │
-│  Posterior P(fake | signals, content_category)                      │
-│    = P(signals | fake) · P(fake | content_category) / P(signals)    │
-│  Uses DLP category output to set the prior:                         │
-│    "wire transfer" category → high prior                            │
-│    "scheduling/lunch" category → low prior                          │
-│    → 7-word style anomaly + wire payload = HIGH (what gut says)     │
-│    → 9-word style anomaly + lunch payload = LOW (what gut says)     │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  Layer 3 — Policy Cascade & Verdict                                 │
-│  Distributor → Reseller → Tenant → Security Group → User policy     │
-│  Applies thresholds and routes to:                                  │
-│    • allow (no action)                                              │
-│    • warn (banner + optional verbal alert via ElevenLabs)           │
-│    • quarantine (hold for admin review)                             │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  Layer 4 — Audit & Explain                                          │
-│    • /explain endpoint: per-email signal breakdown for admin/user   │
-│    • Feedback logging: mark FP / FN without storing body            │
-│    • Threshold telemetry feed back to composer for recalibration    │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────┐         ┌──────────────────────────────────────┐
+│  TENANT ENVIRONMENT                  │         │  RAILWAY (our infrastructure)        │
+│  (customer-controlled)               │         │                                      │
+│                                      │         │                                      │
+│  ┌────────────────────────────────┐  │  push   │  ┌────────────────────────────────┐  │
+│  │ CPP email builder              │──┼─────────┼─▶│ TDE — CPP store & merge engine │  │
+│  │ (runs once initially,          │  │  (CPP   │  │ (CPPs keyed by tenant + hash)  │  │
+│  │  then incrementally)           │  │  only)  │  │ Accepts: email / video / other │  │
+│  └────────────────────────────────┘  │         │  └────────────────────────────────┘  │
+│                                      │         │                  │                   │
+│  ┌────────────────────────────────┐  │  pull   │                  │                   │
+│  │ Tenant-side scorer             │◄─┼─────────┼──────────────────┘                   │
+│  │ (D1–D7, composer, policy)      │  │  (CPP   │                                      │
+│  │ Email bodies live here and     │  │  only)  │  ┌────────────────────────────────┐  │
+│  │ ONLY here                      │  │         │  │ Composer training pipeline     │  │
+│  └────────────────────────────────┘  │         │  │ (runs against Enron DB)        │  │
+│                                      │         │  │ Produces composer_model.joblib │  │
+│  ┌────────────────────────────────┐  │  push   │  └────────────────────────────────┘  │
+│  │ Feedback collector (no bodies) │──┼─────────┼─▶┌────────────────────────────────┐  │
+│  └────────────────────────────────┘  │         │  │ Feedback aggregation (opt-in)  │  │
+│                                      │         │  └────────────────────────────────┘  │
+└──────────────────────────────────────┘         └──────────────────────────────────────┘
+                                                 
+               Email bodies: never cross this line, ever
+               CPPs: cross out once at build time, in once per scored email (cached)
+               Feedback: crosses out as (detector_outputs, label) tuples — no body
 ```
-
-### Where the email body lives
-
-At Layer 1 entry, the body is in memory inside Shield's address space, running on customer infrastructure. Layers 1–3 operate on features extracted from the body + the CPP. The body is destroyed after Layer 1 feature extraction. Only derived signals (per-detector probabilities, per-category DLP flags, metadata) continue to Layer 2. **Nothing from Layer 1 onward contains reconstructible email content.** This is the sovereign-data contract and it's enforced by the pipeline shape, not by policy.
-
-### Where the CPP lives
-
-CPPs are built in-tenant from the user's historical sent items, then packaged as a ~250KB artifact. The CPP is the only object that is allowed to leave the tenant — it's uploaded to the TrueWriting CPP service for storage, versioning, and optional cross-tenant analytics (aggregate stats only, never per-user content). If a tenant opts out of CPP upload, the CPP stays in-tenant; Shield still works, it just runs without cross-tenant aggregate features.
 
 ---
 
-## The seven detectors in detail
+## Tenant-side components
 
-Each detector has three responsibilities: produce a calibrated probability, produce a confidence, and produce a human-readable reason string for `/explain`.
+These run inside the customer's M365 tenant or equivalent — as a containerized service on tenant-owned infrastructure, a serverless function in their cloud account, or an on-prem install for regulated customers. Deployment form varies; the contract does not: **this code sees emails, and the emails never leave this boundary**.
 
-### D1 — Stylometric distance (the current lab stack)
+### Component T1 — Tenant-side scorer
 
-- **Input:** email body + CPP
-- **Features:** character 3/4/5-grams, function-word frequencies, structural (greeting/closing/length), Wave 2 negative-space features (9), Wave 2 recipient-conditional (6)
-- **Model:** XGBoost (max_depth=3) + CalibratedClassifierCV (Platt scaling)
-- **Training:** positive = real user emails; negative = multi-LLM rotated background (Claude, GPT-4, Llama, Mistral, Gemini at varied temperatures)
-- **Known strengths:** Zero-shot catch 0.96. Best component on clearly-not-the-user emails.
-- **Known weaknesses:** Plateaus on few-shot (0.52) and high-fidelity (0.60) attackers. Does not discriminate well when the attacker's LLM has seen examples.
+The scorer is the engine that decides allow / warn / quarantine. It receives each incoming (or internal) email from the tenant's mail hook, pulls the inbox owner's CPP from TDE (cached locally for up to 24 hours per owner), runs the seven detectors on the email body + CPP, composes the detector outputs into a calibrated `P(fake)`, applies policy, logs, and destroys the body.
 
-### D2 — LLM-detector head (the missing piece)
+The seven detectors are specified in detail later in this document. The composer is specified in `scoring_redesign.md`. Policy is specified below.
 
-- **Input:** email body (no CPP needed; this detector is sender-agnostic)
-- **Features:**
-  - Token-level perplexity (GPT-2 or small open model as reference)
-  - Burstiness (std of per-sentence perplexity; humans vary more than LLMs)
-  - Token-rank distribution (DetectGPT / Binoculars / GLTR signatures)
-  - Sentence-length entropy
-- **Model:** Logistic regression calibrated on known-LLM-generated vs. known-human corpora
-- **Why this closes the few-shot / high-fidelity gap:** An attacker using an LLM, *however cleverly prompted*, still produces text with distinguishable statistical signatures at the token distribution level. D1 asks "does this look like Steve?" — D2 asks "does this look machine-generated at all?" They fail differently. Ensembling them captures both signals.
-- **Known weakness:** Humans writing formally (lawyers, HR, formal execs) look LLM-like. Don't run D2 as a standalone high-confidence signal; compose it with D1 and D7.
-- **Status:** Not implemented. Highest-priority new work.
+**Inputs:** email body, headers, thread history (already in-tenant), inbox owner identity, locally-cached CPP.
+**Outputs:** verdict, per-detector scores, `P(fake)` with 95% CI, content category, feedback_id, human-readable reason.
+**Side effects:** structured log entry containing the outputs above — but not the body, not even hashed.
 
-### D3 — DLP / payload category
+**Deployment.** Ships as a Docker container with a small FastAPI surface (`POST /score`). Customer deploys to their M365-connected infrastructure. Tenant's mail hook (M365 Graph webhook, SMTP shim, or mail flow rule) calls `POST /score` for each email. We provide a reference M365 Graph subscription setup as part of the install; customers with different mail infrastructures write their own hook.
 
-- **Input:** email body
-- **Features:** Current `dlp_scanner.py` — hard categories (payment_change, gift_cards, wire, credentials, sensitive_data, crypto, financial_urgency) and soft categories (urgency, secrecy). Probabilistic-OR top-2 hard + soft amplification.
-- **Output:** per-category scores + overall DLP probability + top category label
-- **Role in the composer:** D3's category label feeds Layer 2's Bayesian prior. This is the "7-word credit card vs. 9-word lunch" mechanism in code form.
-- **Status:** Well-designed, already in the lab stack, needs to be ported into Shield's path.
+**What the scorer container has network access to:**
+- TDE on Railway (outbound HTTPS, for CPP pull and feedback push) — allowlistable to specific hostnames
+- Nothing else. No outbound LLM API calls, no external feature services, no telemetry to us. If the customer wants to run the LLM-detector (D2) via a cloud API rather than the bundled local model, they configure that themselves with their own keys — but the default build uses only local inference, so the container works fully air-gapped from all external services except TDE.
+
+### Component T2 — CPP email builder (initial run, incremental refresh)
+
+One-time plus incremental: reads the user's historical sent items from their mailbox, produces a CPP artifact, POSTs to TDE. Runs inside the tenant boundary just like the scorer; the only thing that leaves is the CPP itself.
+
+**Initial run:** walks up to N (default 2000) most recent sent emails, extracts features, writes CPP. Takes minutes per user. Triggered by tenant admin for bulk initial provisioning.
+
+**Incremental refresh:** nightly job, processes the day's newly-sent emails, updates the CPP in-place at TDE. Keeps the fingerprint current as the user's style evolves.
+
+**CPP artifact structure** (covered more in `scoring_redesign.md`):
+- `universal` block: medium-agnostic features (function-word distributions, character n-grams, sentence-length entropy, vocabulary richness, topic affinity). These are the features that can merge with a video- or podcast-sourced CPP for the same identity.
+- `email_only` block: email-specific features (greeting and sign-off patterns, reply conventions, recipient-conditional substyle, thread behavior). These pass through unchanged and don't participate in merging.
+- `metadata` block: training volume, temporal coverage, estimated discriminative power from self-consistency tests, CPP format version, source_type="email".
+
+**What the builder sends to TDE:** the CPP artifact, the tenant_id, a tenant-scoped user_id, and a SHA256 of the user's email address (never the plaintext email). TDE stores these and serves them back to the scorer on the next email for that user.
+
+### Component T3 — Feedback collector
+
+When a tenant admin or (per policy) a recipient marks a scored email as true-positive, false-positive, or inconclusive, the collector writes `(feedback_id, detector_outputs, content_category, verdict, admin_label, timestamp)` — no body — to a tenant-local feedback table. On a schedule (default weekly), the collector batches and pushes the feedback to the Railway-side aggregation service, where it feeds quarterly retraining.
+
+Feedback push is opt-in per tenant. Tenants that decline still get their local feedback log; they just don't contribute to global retraining.
+
+---
+
+## Railway-side components
+
+These run on our infrastructure. They handle CPP storage, retraining, and (opt-in) feedback aggregation. **They never see an email body. There is no endpoint, no path, no channel by which a body can reach them.**
+
+### Component R1 — TDE CPP API
+
+TDE (Targeted Decomposition Engine) is the unified CPP store. It is already running on Railway. This project adds the first CPP API to it.
+
+**Endpoints, in spec form:**
+```
+POST   /cpp
+         body: { tenant_id, user_id, email_sha256, source_type,
+                 cpp_artifact }
+         behavior: stores or updates CPP for this (tenant, user, source).
+                   If a CPP already exists for this identity from a
+                   different source_type, the stored record keeps them
+                   separate — merging happens at GET time.
+         auth: tenant API key
+
+GET    /cpp?tenant_id=...&email_sha256=...
+         returns: { user_id, merged_cpp, source_types_included,
+                    staleness_seconds }
+         behavior: looks up all CPPs for this (tenant, email_sha256)
+                   across source types, merges them on the universal
+                   block (source-weighted by training volume), passes
+                   through email_only block if present.
+         auth: tenant API key
+
+DELETE /cpp?tenant_id=...&user_id=...
+         behavior: removes all CPPs for this user across all sources.
+                   GDPR/right-to-erasure path.
+         auth: tenant API key
+
+GET    /version
+         returns: TDE CPP API version, supported CPP format versions.
+```
+
+**Storage shape (Postgres on Railway):**
+
+```
+cpps (
+    id              BIGSERIAL PRIMARY KEY,
+    tenant_id       TEXT NOT NULL,
+    user_id         TEXT NOT NULL,      -- tenant-scoped
+    email_sha256    TEXT NOT NULL,      -- for lookup; no plaintext email
+    source_type     TEXT NOT NULL,      -- 'email', 'video', 'podcast', ...
+    cpp_artifact    JSONB NOT NULL,     -- the CPP itself
+    training_volume INT,                -- for merge weighting
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (tenant_id, user_id, source_type)
+);
+CREATE INDEX ON cpps (tenant_id, email_sha256);
+```
+
+There is no `emails` table. There is no `email_body` column anywhere in TDE's schema. The data model makes it impossible to accidentally store email content.
+
+**Identity keying.** Tenant-scoped user_id as the canonical key; email_sha256 as the lookup alias. A user at two tenants = two separate CPPs, no cross-tenant leakage. Decided in `scoring_redesign.md`, confirmed here.
+
+**Merging.** When a user has an email CPP and a video CPP, GET returns a merged artifact: universal blocks combined via source-weighted averaging (weight = `sqrt(training_volume)`, so a 2000-email CPP doesn't completely drown a 30-video CPP), email_only block from the email source passed through. The scorer consumes whatever it gets — if only email is present, it gets an email-only CPP with no merging; if video arrives later, subsequent pulls return a richer merged CPP.
+
+### Component R2 — Composer training pipeline
+
+Runs against the Enron database already on Railway (see `enron_collector/` — that work is done and we keep it). For each selected writer:
+
+1. Build a CPP from 80% of their sent items (using the same builder code as T2, in a training harness).
+2. Generate the three-tier attacker corpus plus the adversarial tiers (see `eval_strategy.md`).
+3. Run D1–D7 on held-out real + attacker sets.
+4. Fit the calibrated logistic regression composer.
+5. Measure catch@FPR targets, calibration ECE, per-writer distribution.
+
+Outputs:
+- `composer_model.joblib` — the versioned composer artifact, shipped as part of the scorer container.
+- `eval_report.html` — the per-release eval report (structure defined in `eval_strategy.md`).
+- `model_manifest.json` — version, training data summary, gate-passing numbers, signed hash.
+
+Execution uses the parallel agent swarm described in `eval_strategy.md` — ~2 hours wall time for a full 40-writer cross-validation.
+
+### Component R3 — Feedback aggregation (opt-in)
+
+Receives weekly feedback batches from opt-in tenants. Stores them keyed by anonymized tenant hash. On the quarterly retraining trigger, the aggregate feedback joins the Enron-derived training data for the next composer version.
+
+---
+
+## Layer-0 bypass rules
+
+Not every email should hit the scorer. The following are fast-pathed at the tenant mail hook before `POST /score` is called:
+
+- **Internal-to-internal** — both sender and recipient in the same tenant directory. Risk profile is fundamentally different; we don't score it.
+- **Trusted-partner allowlist** — tenant-configured sender domains. (Admins are warned that allowlisted domains are an attacker target in their own right.)
+- **System-generated** — Jira, DocuSign, Salesforce, and similar transactional senders, identified by a combination of envelope patterns and sender domain.
+- **In-thread replies where the recipient initiated the thread** — the recipient is talking to themselves (or someone they chose to talk to).
+
+Bypassed mail is logged as `verdict=allow, reason=bypass/<rule>` and never reaches the detectors. The eval reporting explicitly separates bypass-rate from scored-rate metrics (see `eval_strategy.md` — reporting "catch rate on all real mail including bypassed" is a dishonest number and we don't publish it).
+
+---
+
+## The seven detectors
+
+Each detector produces `(probability, confidence, reason_string)`. They run inside the tenant boundary as part of the T1 scorer. The composer consumes them.
+
+### D1 — Stylometric distance
+
+**Input:** email body + CPP.
+**Features:** character 3/4/5-grams, function-word frequencies, greeting/closing structure, length patterns, negative-space features (what the user *doesn't* do), recipient-conditional style.
+**Model:** gradient-boosted classifier over features, wrapped in Platt calibration.
+**Known strength:** zero-shot attacker catch is excellent.
+**Known weakness:** degrades when the attacker has seen real samples; does not carry the pipeline alone.
+**Short-email behavior:** produces a confidence value that drops sharply below 15 words. The composer uses this confidence to downweight D1's contribution on short emails.
+
+### D2 — LLM-generated-text detector
+
+**Input:** email body (CPP not required; this detector is sender-agnostic).
+**Features:** token-level perplexity (local small reference model), burstiness (per-sentence perplexity variance — humans vary more than LLMs), token-rank distribution signatures, sentence-length entropy.
+**Model:** calibrated logistic regression over the features.
+**Why:** an attacker using an LLM produces statistically distinguishable text *regardless* of how cleverly they prompt it for style. D1 asks "does this look like Alice?"; D2 asks "does this look machine-generated at all?" They fail differently. Ensembling captures both.
+**Known weakness:** formal human writers (lawyers, HR, senior execs with terse styles) read as LLM-like. D2 alone is low-confidence; the composer handles this via learned interaction terms.
+
+### D3 — DLP content category
+
+**Input:** email body.
+**Features:** pattern rules for hard categories (wire, payment_change, credentials, gift_card, sensitive_data, crypto, financial_urgency) and soft categories (urgency framing, secrecy framing). Probabilistic combination over top-2 hard + soft amplification.
+**Output:** per-category scores, overall DLP probability, top category label.
+**Role in the composer:** the top category label indexes into the content-category prior table. This is the "5-word lunch vs. 5-word wire" asymmetry mechanism.
+**Sovereignty note:** D3 runs inside the tenant. The triggering text never leaves with the detector's output — `/explain` reports "DLP flagged: wire / payment instruction, confidence 0.87" and does not echo the email.
 
 ### D4 — Ask-type novelty
 
-- **Input:** email body + the sender's historical sent items (in-tenant query)
-- **Features:** semantic embedding of the email's "ask" (extracted via small LLM prompt or pattern matching). Distance to nearest past ask of the same sender.
-- **Example:** Sender has never asked for a wire transfer in 3 years of sent items. This email asks for a wire transfer. That's a novelty score of ~1.0.
-- **Why this matters:** Stylometric match can be perfect and the email still be fake if the *type of request* has never come from this sender before. Account takeover attackers frequently introduce ask types the user has never used.
-- **Status:** Not implemented. Moderate-priority new work. Depends on a tenant-side semantic index of past sent items.
+**Input:** email body + the sender's historical sent items (in-tenant query — a simple semantic index of past sent items, built alongside the CPP).
+**Features:** semantic embedding of the email's "ask" (what is this email requesting the recipient do?); nearest-neighbor distance to the sender's prior asks.
+**Why:** stylometric match can be perfect and the email still be fake if the *type of request* has never come from this sender before. Account takeover attackers frequently introduce ask types the user has never used — the boss "asking for a wire" for the first time in three years is a novelty signal.
+**Storage:** ask embeddings live in-tenant alongside the CPP cache. They never go to TDE.
 
 ### D5 — Recipient-conditional style
 
-- **Input:** email body + CPP with per-recipient substyle + recipient identity
-- **Features:** Wave 2 recipient-conditional profiler (RCP). Does the sender write to *this specific recipient* in this formality / length / greeting pattern?
-- **Why:** Steve writes differently to his accountant than to his best friend. A BEC email from "Steve" to his accountant that reads like his emails to his best friend is a style mismatch that D1 might miss.
-- **Status:** Implemented in Wave 2 feature pack. Needs porting into Shield.
+**Input:** email body + CPP's email_only block + recipient identity.
+**Features:** per-recipient style substitutions (the user writes differently to their accountant than to their best friend). Pulled from the CPP.
+**Why:** an email from "Alice" to her accountant that reads like her emails to her best friend is a mismatch D1 might miss.
 
 ### D6 — Thread coherence
 
-- **Input:** email body + thread history (in-tenant)
-- **Features:** Semantic continuity between this email and the prior 2–3 messages in the thread. LLM-powered coherence scoring (small model, in-tenant).
-- **Example:** Thread is about scheduling a lunch. Reply suddenly asks for wire transfer. Coherence: 0.05. This is the "sudden topic jump" signal that real BEC attackers produce when they hijack an existing thread.
-- **Status:** Not implemented. Moderate-priority new work.
+**Input:** email body + prior 2–3 messages in the thread (in-tenant).
+**Features:** semantic continuity score between this email and the prior thread. Computed with a local small model; no cloud inference.
+**Why:** a thread about scheduling lunch that suddenly contains a wire transfer request has a coherence score near zero. This is the "thread hijack" signal that real BEC attackers produce when they take over a conversation.
 
 ### D7 — Metadata anomaly
 
-- **Input:** email headers + send metadata + CPP metadata profile
-- **Features:** send time-of-day deviation, sending client (Outlook web vs. mobile vs. API), geo-IP of authenticated session, reply-to manipulation, display-name spoofing.
-- **Why:** The cheapest, highest-precision signals live in the envelope. An email "from Steve" sent at 3am from a Lagos IP on a client Steve has never used is almost certainly not Steve, regardless of what the body says.
-- **Status:** Partially implemented in Shield's existing infrastructure. Needs a scoring wrapper.
+**Input:** email headers + send metadata + the CPP's metadata profile.
+**Features:** send time-of-day deviation, sending client (Outlook web vs. mobile vs. API), geo-IP of the authenticated session, reply-to manipulation, display-name spoofing.
+**Why:** the cheapest, highest-precision signals live in the envelope. An email "from Alice" sent at 3am from a Lagos IP on a client she has never used is almost certainly not Alice, regardless of what the body says.
 
 ---
 
-## The Bayesian content-conditional composer (Layer 2)
+## Composer
 
-The core idea, expressed in one line:
+Specified in full in `scoring_redesign.md`. In brief: learned calibrated logistic regression over the seven detector outputs plus interaction features, multiplied by a content-category prior indexed by D3's top category label, producing `P(fake | signals, content_category)` with a 95% CI.
 
-> **The confidence required in the "this isn't really from you" signal should depend on what the email is asking for.**
+Replaces all hand-coded thresholds and if-ladders. The composer is ~100 lines of Python plus the fitted model artifact.
 
-A 7-word "what's for lunch?" with a 0.20 stylometric anomaly is ignorable. A 7-word "wire $50k to attached account" with a 0.20 stylometric anomaly is blocked. The *same* stylometric signal produces opposite verdicts because the content prior is different.
+---
 
-### Formally
+## Policy layer
 
-Let `S` = vector of detector outputs (D1..D7) and `C` = DLP content category (from D3).
+Sits between composer output and verdict. Applies, in order:
 
-The current composer uses thresholds on a piecewise-linear blend of signals: if D1 ≥ 0.02 → high; else if D1 ≥ 0.007 AND D3 ≥ 0.5 → mid; etc. This is a hand-coded if-ladder that the Kimi report partially addresses but fundamentally treats as a weighting problem.
+1. **Override rules** (tenant-configured). "Sender domain on tenant blocklist → force block." Narrow, high-confidence tripwires.
+2. **Hysteresis.** If the previous email from this sender in the last 24h was scored `allow`, the threshold for moving to `warn` is 0.5. If it was `warn`, the threshold for moving back to `allow` is 0.4. This 0.1 band suppresses oscillation without hiding a genuine escalation.
+3. **Confidence-aware thresholds.** If the 95% CI on `P(fake)` crosses the block threshold, the verdict is downgraded from block to warn. We never quarantine on a measurement we're uncertain about.
+4. **Security-group policy.** Tenants can configure different thresholds per security group — stricter for finance and executives, looser for general staff.
+5. **Mode gate.** The tenant is running in shadow / warn / enforce mode (pilot phasing per `pilot_readiness_plan.md`). Shadow mode collapses all verdicts to "log only, no user-visible action" regardless of score.
 
-The Bayesian composer instead computes:
+---
+
+## Explainability
+
+Every scored email gets an `/explain` payload:
 
 ```
-P(fake | S, C) ∝ P(S | fake) · P(fake | C)
+{
+  "feedback_id": "...",
+  "verdict": "warn",
+  "p_fake": 0.63,
+  "p_fake_ci_95": [0.51, 0.74],
+  "content_category": "wire / payment instruction",
+  "content_category_prior": 0.40,
+  "detectors": {
+    "D1_stylometric":         {"prob": 0.18, "confidence": 0.45, "reason": "..."},
+    "D2_llm_detector":        {"prob": 0.71, "confidence": 0.82, "reason": "..."},
+    "D3_dlp":                 {"prob": 0.87, "confidence": 0.95, "reason": "wire instruction detected"},
+    "D4_ask_novelty":         {"prob": 0.92, "confidence": 0.70, "reason": "no prior ask of this type"},
+    "D5_recipient_style":     {"prob": 0.30, "confidence": 0.55, "reason": "..."},
+    "D6_thread_coherence":    {"prob": 0.40, "confidence": 0.60, "reason": "..."},
+    "D7_metadata":            {"prob": 0.22, "confidence": 0.80, "reason": "..."}
+  },
+  "hysteresis_applied": false,
+  "override_applied": null,
+  "cpp_version": "user123/email/v47",
+  "scorer_version": "chimera-secured/2026.05.1",
+  "composer_version": "bayesian-v1.2"
+}
 ```
 
-`P(fake | C)` is a lookup table by content category, informed by BEC incident-rate literature and adjustable per-tenant:
-
-| Content category              | P(fake \| C) |
-|------------------------------|-------------|
-| Wire/payment instruction     | 0.40        |
-| Credentials request          | 0.35        |
-| Gift card request            | 0.50        |
-| Invoice/payment change       | 0.30        |
-| Sensitive data request       | 0.20        |
-| Urgent / secrecy framing     | 0.10        |
-| Scheduling / social          | 0.003       |
-| Status / informational       | 0.002       |
-
-`P(S | fake)` is learned from the attacker corpus. The composer multiplies these and normalizes. The result is a posterior P(fake | S, C) that correctly handles the lunch vs. wire asymmetry without any hand-tuned threshold ladder.
-
-### Worked example — the user's own intuition
-
-**Case 1: 9-word lunch ask, style anomaly 0.20.**
-- Content category: scheduling/social (prior 0.003)
-- Posterior ≈ 0.003 × (style likelihood ratio ~3) ≈ 0.009
-- Verdict: allow. Matches gut.
-
-**Case 2: 7-word credit-card ask, style anomaly 0.20.**
-- Content category: sensitive_data (prior 0.20)
-- Posterior ≈ 0.20 × (style likelihood ratio ~3) ≈ 0.60
-- Verdict: warn/block at 0.5 threshold. Matches gut.
-
-The composer is ~80 lines of Python. It replaces `risk_composer.py`'s if-ladder.
+The admin UI reads this and renders a human-readable breakdown. Short-email cases are called out specifically: "This is a short email, so style isn't a strong signal — but the content looks like a wire transfer request, which we treat as high risk regardless."
 
 ---
 
-## ElevenLabs verbal warning (novel creative lever)
-
-On HIGH-confidence verdicts (composite ≥ 0.85), trigger a verbal warning synthesized via ElevenLabs and played to the recipient through the Outlook add-in or an OS-level notification.
-
-**Copy examples:**
-- Wire transfer case: *"Heads up — the email from Steve asking for a wire transfer doesn't match his usual writing style. Please verify with him directly before acting."*
-- Credential case: *"Careful — this password-reset email from IT doesn't look like it came from your IT team. Pause and check with them in person or on Slack."*
-
-**Why this is worth building:**
-1. **Memorability.** A voice alert lodges in working memory in a way a banner does not. The recipient remembers the pattern for next time.
-2. **Differentiation.** No commercial BEC tool does this. Rain Networks can sell this as a feature no incumbent has.
-3. **Cost.** ElevenLabs API is cheap at HIGH-confidence rate (probably <1% of flagged mail → <0.01% of all mail). $10–50/month per tenant ceiling.
-4. **Opt-in.** Configurable per user, per security group. Admins can disable if annoying.
-
-**Why it's not the first thing built:** It's a Phase 2+ feature. It only matters after Layer 1–3 are solid and the HIGH-confidence tier is well-calibrated. Shipping it before the composer is stable produces voice alerts on false positives, which is the worst possible alert fatigue.
-
-**Config:** `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` in `.env.example`, already wired.
-
----
-
-## Shield port-in plan
-
-The current production Shield uses `shield/scoring.py` — an 8-feature hand-weighted deviation scorer unconnected to anything in this document. The port-in plan:
-
-**Step 1 — Wrap the lab composite as a service.**
-The lab stack (`chimera_scorer.py` + Wave 2 features + DLP + the new Bayesian composer) gets wrapped in a FastAPI service at `shield_scorer_service.py`. Input: email body + CPP + thread history. Output: per-detector scores + composite + reason + explain payload.
-
-**Step 2 — Replace Shield's scorer call.**
-`shield/service.py` currently calls `scoring.score_email(...)`. Change the call to hit the new service. Shield's database, policy cascade, and M365 integration stay unchanged.
-
-**Step 3 — Preserve the current scorer behind a feature flag.**
-During the pilot's shadow phase, both scorers run in parallel. Verdicts are logged but the old scorer's output drives any (disabled) enforcement. Once confidence is established, the flag flips.
-
-**Step 4 — Retire the old scorer.**
-After Phase 2 of the pilot, `shield/scoring.py` becomes dead code and is removed. The 8-feature hand-weighted scorer was a bootstrap; it's served its purpose.
-
----
-
-## Model artifacts & versioning
+## Model artifacts and versioning
 
 Every deployed scorer version produces a signed manifest:
 
 ```json
 {
-  "version": "chimera-secured/2026.04.1",
+  "scorer_version": "chimera-secured/2026.05.1",
   "components": {
-    "stylometric": {"model_sha256": "...", "features": 28},
-    "llm_detector": {"model_sha256": "...", "reference_model": "gpt2-small"},
-    "dlp": {"ruleset_sha256": "...", "version": "2.1"},
-    "composer": {"prior_table_sha256": "...", "version": "bayesian-v1"}
+    "stylometric_D1":   { "model_sha256": "...", "features": 34 },
+    "llm_detector_D2":  { "model_sha256": "...", "reference_model": "gpt2-small-quantized" },
+    "dlp_D3":           { "ruleset_sha256": "...", "version": "2.1" },
+    "ask_novelty_D4":   { "embedder_sha256": "..." },
+    "composer":         { "model_sha256": "...", "version": "bayesian-v1.2",
+                          "prior_table_sha256": "..." }
   },
-  "trained_at": "2026-04-12T00:00:00Z",
-  "eval_metrics": { /* gate-passing numbers */ },
-  "ship_gate_passed": true
+  "trained_at": "2026-04-14T00:00:00Z",
+  "eval_metrics": { /* ship-gate numbers from pilot_readiness_plan.md */ },
+  "gates_passed": true
 }
 ```
 
-This is what Shield loads at startup and what the `/version` endpoint returns. Pilots always know exactly which model version is in their tenant.
+Shield loads this at startup. The `/version` endpoint returns it. Pilots always know exactly which model is in their tenant.
 
 ---
 
-## What's NOT in this spec (deliberate)
+## What's deliberately NOT in this spec
 
-1. **A new UI.** Shield's M365 add-in stays. Verdicts render through existing banner/quarantine infrastructure. No re-skin.
-2. **A new pricing model.** The architecture doesn't care about pricing; that's Rain's work.
-3. **A re-invented policy engine.** The distributor → reseller → tenant → group cascade in `shield/` is fine. Layer 3 consumes it as-is.
-4. **Cross-tenant learning.** Not allowed under the sovereignty constraint. Each tenant's CPPs stay separate. Aggregate anonymous statistics (e.g., baseline LLM-detector scores for "normal" English) can be learned cross-tenant without violating sovereignty, but per-user signals never mix.
+1. **No port-in of the old Shield or lab scorer code.** Fresh build. Old code is reference-only.
+2. **No email bodies on Railway infrastructure.** Anywhere. No feature, no backdoor, no "for debugging" path.
+3. **No per-tenant composer weight training.** Tenants lack labeled BEC attacks; weights are learned globally. Tenants configure thresholds and priors, not coefficients.
+4. **No ElevenLabs verbal warning in v1.** Deferred to post-pilot. It's differentiating but only useful after composer calibration is proven stable in production.
+5. **No cross-tenant CPP leakage.** Same person in two tenants = two CPPs, keyed by tenant. TDE does not have a "find this person across tenants" API.
+6. **No handling of the human-from-compromised-machine attacker.** We say this out loud. A real person sitting at the owner's machine typing a benign-looking request in their own phrasing will not be caught. Chimera Secured is a behavioral security tool, not a possession-proof tool.
 
 ---
 
-## Sequencing
+## Sequencing, restated
 
-When all five pilot-readiness gates (see `pilot_readiness_plan.md`) clear, the architecture above is what ships. Until then, the sequence inside this architecture is:
+Phase 0 (fresh-build foundation):
+1. CPP email builder (T2) — local + Railway-deployable
+2. TDE CPP API (R1) — Railway
+3. Composer training pipeline (R2) — Railway, runs against existing Enron DB
+4. Tenant-side scorer (T1) with all seven detectors — deployable container
 
-1. **Stylometric + DLP port** into Shield (replace 8-feature scorer). Ship with existing threshold ladder.
-2. **LLM-detector head (D2)** added to the ensemble. Ablation: does few-shot/high-fidelity catch jump?
-3. **Bayesian composer (Layer 2)** replaces the if-ladder. Ablation: does real-false-flag drop while catch holds?
-4. **Ask-type novelty (D4) and thread coherence (D6)**. Ablation: do they add incremental catch or are they redundant with D1+D2?
-5. **Verbal warning (ElevenLabs)** on HIGH-confidence only, opt-in per user.
-6. **Cross-tenant aggregate statistics** (anonymous, opt-in) as polish.
+Phase 1 (pilot readiness):
+5. Policy layer (hysteresis, thresholds, overrides)
+6. Feedback collector (T3) + aggregation (R3)
+7. `/explain` endpoint wiring
 
-Steps 1–3 are pre-pilot. Steps 4–5 are early-pilot enhancements. Step 6 is post-GA.
+Phase 2 (during pilot, once Phase 1 is calibrated):
+8. Ask-type novelty (D4) expansion with richer semantic index
+9. ElevenLabs verbal warning on HIGH-confidence verdicts
+10. Cross-tenant anonymous aggregate statistics (opt-in)
+
+The pilot-readiness gates in `pilot_readiness_plan.md` are the bar for moving between phases.

@@ -1,0 +1,10 @@
+providers = ["python"]
+
+[phases.setup]
+nixPkgs = ["python311", "gcc", "stdenv.cc.cc.lib"]
+
+[phases.install]
+cmds = ["pip install --upgrade pip && pip install -r requirements.txt"]
+
+[start]
+cmd = "uvicorn src.app:app --host 0.0.0.0 --port $PORT"
