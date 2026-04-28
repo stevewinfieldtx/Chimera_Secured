@@ -48,6 +48,7 @@ from labels import get_labeling_queue, labeling_progress, set_label
 from models import (
     CPPStatusRequest, CPPStatusResponse,
     EnrollRequest, EnrollResponse,
+    GraphEnrollRequest, GraphEnrollResponse,
     HealthResponse,
     LabelingProgressResponse,
     LabelingQueueItem as LabelingQueueItemModel,
@@ -410,26 +411,6 @@ def progress(tenant_id: str, user_id: str) -> LabelingProgressResponse:
 
 
 # ---- Graph-based enrollment (convenience endpoint) ----------------------
-
-class GraphEnrollRequest(BaseModel):
-    """Enroll a user by pulling their sent mail directly from Graph API."""
-    tenant_id: str = "default"
-    user_email: str
-    max_emails: int = 2000
-
-
-class GraphEnrollResponse(BaseModel):
-    status: str
-    user_email: str
-    emails_fetched: int = 0
-    cpp_version: str | None = None
-    content_hash: str | None = None
-    training_email_count: int | None = None
-    message: str
-
-
-from pydantic import BaseModel as BaseModel  # already imported, just for clarity
-
 
 @app.post("/enroll-from-graph", response_model=GraphEnrollResponse)
 def enroll_from_graph(req: GraphEnrollRequest) -> GraphEnrollResponse:

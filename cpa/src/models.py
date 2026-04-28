@@ -178,3 +178,22 @@ class VoiceProfileResponse(BaseModel):
         description="Full profile as copy-pasteable text for use in other LLMs.",
     )
     markdown: str | None = None
+
+
+# ---- Graph-based enrollment ----------------------------------------------
+
+class GraphEnrollRequest(BaseModel):
+    """Enroll a user by pulling their sent mail directly from Graph API."""
+    tenant_id: str = "default"
+    user_email: str
+    max_emails: int = 2000
+
+
+class GraphEnrollResponse(BaseModel):
+    status: str
+    user_email: str
+    emails_fetched: int = 0
+    cpp_version: str | None = None
+    content_hash: str | None = None
+    training_email_count: int | None = None
+    message: str
