@@ -1,0 +1,27 @@
+{
+  "product": "chimera_secured",
+  "role": "partner_agent",
+  "partner": "rain_networks",
+  "agent_name": "Chimera Secured - Rain Networks Agent",
+  "first_message": "Hi there! Thanks for reaching out about Chimera Secured. I'm here to help - what can I answer for you?",
+  "prompt_template": "base-agent",
+  "prompt_vars": {
+    "product_name": "Chimera Secured",
+    "partner_name": "Rain Networks",
+    "escalation_contact": "Steve Winfield (stevewinfieldtx@gmail.com)"
+  },
+  "voice_id": "PICK_A_UNIQUE_VOICE_ID",
+  "llm": "gpt-4o",
+  "temperature": 0.6,
+  "language": "en",
+  "max_duration_seconds": 1800,
+  "bridge_url": "https://YOUR_BRIDGE_URL",
+  "bridge_secret": "YOUR_WEBHOOK_SECRET",
+  "collection_id": "chimera_secured",
+  "tool_name": "get_knowledge",
+  "tool_description": "Retrieve product knowledge about Chimera Secured. Use whenever the user asks about the product, how it works, deployment, competitors, pricing, or the pilot program.",
+  "twilio_phone_number": "",
+  "phone_label": "Chimera Secured - Rain Networks",
+  "widget_embed": true,
+  "widget_description": "Chat widget for Rain Networks Chimera Secured subsite"
+}

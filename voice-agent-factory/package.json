@@ -1,0 +1,13 @@
+{
+  "name": "voice-agent-factory",
+  "version": "1.0.0",
+  "description": "Provision ElevenLabs voice agents with TDE-backed knowledge and Twilio phone numbers — one command per agent, reusable across all WinTech products",
+  "main": "agent-factory.js",
+  "scripts": {
+    "list": "node agent-factory.js --list",
+    "create": "node agent-factory.js --config"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

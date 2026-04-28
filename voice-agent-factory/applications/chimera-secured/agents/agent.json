@@ -1,0 +1,23 @@
+{
+  "product": "chimera_secured",
+  "role": "product_expert",
+  "agent_name": "Chimera Secured - Alex",
+  "first_message": "Hi, this is Alex with Chimera Secured. Thanks for calling - how can I help you today?",
+  "prompt_template": "base-agent",
+  "prompt_vars": {
+    "product_name": "Chimera Secured",
+    "escalation_contact": "Steve Winfield (stevewinfieldtx@gmail.com)"
+  },
+  "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+  "llm": "gpt-4o",
+  "temperature": 0.6,
+  "language": "en",
+  "max_duration_seconds": 1800,
+  "bridge_url": "https://YOUR_BRIDGE_URL",
+  "bridge_secret": "YOUR_WEBHOOK_SECRET",
+  "collection_id": "chimera_secured",
+  "tool_name": "get_knowledge",
+  "tool_description": "Retrieve product knowledge about Chimera Secured. Use whenever the caller asks about the product, how it works, deployment, troubleshooting, competitors, pricing, or the pilot program.",
+  "twilio_phone_number": "+15802327233",
+  "phone_label": "Chimera Secured - 580-BEC-SAFE"
+}

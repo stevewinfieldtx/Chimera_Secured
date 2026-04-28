@@ -18,6 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 COPY static/ ./static/
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 # Default data directory
 RUN mkdir -p /app/cpa_data/artifacts
@@ -28,6 +30,4 @@ ENV CPA_ARTIFACTS_DIR=/app/cpa_data/artifacts
 
 EXPOSE 8000
 
-# Run from the src directory so imports work
-WORKDIR /app/src
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+ENTRYPOINT ["./entrypoint.sh"]

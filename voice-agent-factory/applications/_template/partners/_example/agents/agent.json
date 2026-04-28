@@ -1,0 +1,27 @@
+{
+  "product": "YOUR_PRODUCT_SLUG",
+  "role": "partner_agent",
+  "partner": "PARTNER_SLUG",
+  "agent_name": "Product Name - Partner Name Agent",
+  "first_message": "Hi, thanks for reaching out about [Product]. How can I help?",
+  "prompt_template": "base-agent",
+  "prompt_vars": {
+    "product_name": "Your Product Name",
+    "partner_name": "Partner Name",
+    "escalation_contact": "Contact Name (email@example.com)"
+  },
+  "voice_id": "ELEVENLABS_VOICE_ID",
+  "llm": "gpt-4o",
+  "temperature": 0.6,
+  "language": "en",
+  "max_duration_seconds": 1800,
+  "bridge_url": "https://YOUR_DEPLOYED_BRIDGE_URL",
+  "bridge_secret": "YOUR_WEBHOOK_SECRET",
+  "collection_id": "YOUR_TDE_COLLECTION_ID",
+  "tool_name": "get_knowledge",
+  "tool_description": "Retrieve knowledge about [Product]. Use whenever the user asks about the product.",
+  "twilio_phone_number": "",
+  "phone_label": "Product - Partner Name",
+  "widget_embed": true,
+  "widget_description": "Chat widget for partner subsite"
+}

@@ -1,0 +1,53 @@
+version: "3.9"
+
+# ==========================================================================
+# Chimera Secured CPA — One-command deployment
+#
+# Usage:
+#   1. Copy .env.example to .env and fill in your values
+#   2. docker compose up -d
+#   3. Open http://localhost:8000/dashboard
+#
+# This bundles:
+#   - PostgreSQL 16 (data stored in a Docker volume)
+#   - CPA service (auto-seeds background corpus on first run)
+# ==========================================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cpa
+      POSTGRES_USER: cpa
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cpa_pilot_2024}
+    volumes:
+      - cpa-pgdata:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cpa"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  cpa:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      # Override DATABASE_URL to point to the bundled Postgres
+      DATABASE_URL: postgresql://cpa:${POSTGRES_PASSWORD:-cpa_pilot_2024}@db:5432/cpa
+    ports:
+      - "${CPA_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - cpa-data:/app/cpa_data
+    restart: unless-stopped
+
+volumes:
+  cpa-pgdata:
+  cpa-data:

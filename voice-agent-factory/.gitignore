@@ -1,0 +1,14 @@
+# Secrets — never commit
+.env
+*.env.local
+
+# Deployed agent results (contain IDs, not secrets, but machine-specific)
+*.result.json
+
+# Node
+node_modules/
+package-lock.json
+
+# OS
+.DS_Store
+Thumbs.db

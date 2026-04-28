@@ -1,0 +1,23 @@
+{
+  "product": "YOUR_PRODUCT_SLUG",
+  "role": "product_expert",
+  "agent_name": "Product Name - Agent Name",
+  "first_message": "Hi, this is [Name] with [Product]. How can I help you today?",
+  "prompt_template": "base-agent",
+  "prompt_vars": {
+    "product_name": "Your Product Name",
+    "escalation_contact": "Contact Name (email@example.com)"
+  },
+  "voice_id": "ELEVENLABS_VOICE_ID",
+  "llm": "gpt-4o",
+  "temperature": 0.6,
+  "language": "en",
+  "max_duration_seconds": 1800,
+  "bridge_url": "https://YOUR_DEPLOYED_BRIDGE_URL",
+  "bridge_secret": "YOUR_WEBHOOK_SECRET",
+  "collection_id": "YOUR_TDE_COLLECTION_ID",
+  "tool_name": "get_knowledge",
+  "tool_description": "Retrieve knowledge about [Product]. Use whenever the caller asks about the product, deployment, troubleshooting, competitors, or pricing.",
+  "twilio_phone_number": "+1XXXXXXXXXX",
+  "phone_label": "Product Name - Main Line"
+}
