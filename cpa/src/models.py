@@ -156,3 +156,25 @@ class LabelingProgressResponse(BaseModel):
     user_labeled: int
     auto_labeled: int
     flagged_for_review: int
+
+
+# ---- Voice profile -------------------------------------------------------
+
+class VoiceProfileSection(BaseModel):
+    number: int
+    title: str
+    emoji: str
+    body: str
+
+
+class VoiceProfileResponse(BaseModel):
+    exists: bool
+    formality_score: float | None = None
+    email_count: int | None = None
+    summary: str | None = None
+    sections: list[VoiceProfileSection] | None = None
+    prompt_text: str | None = Field(
+        default=None,
+        description="Full profile as copy-pasteable text for use in other LLMs.",
+    )
+    markdown: str | None = None

@@ -26,10 +26,18 @@ Design notes for next-Claude:
 from __future__ import annotations
 
 import logging
+import os
+from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from auto_classify import DirectoryEntry
 from background_corpus import ensure_background_corpus
@@ -46,6 +54,7 @@ from models import (
     LabelingQueueResponse,
     ScoreRequest, ScoreResponse,
     SetLabelRequest, SetLabelResponse,
+    VoiceProfileResponse,
 )
 from scoring import invalidate_cpp_cache, score_email
 
@@ -57,21 +66,10 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# ---- App ---------------------------------------------------------------
+# ---- Lifespan -----------------------------------------------------------
 
-app = FastAPI(
-    title="CPA — Communication Personality Analyzer",
-    version=SERVICE_VERSION,
-    description=(
-        "Builds per-user Communication Personality Profiles (CPPs) from "
-        "email history and scores new emails against those profiles. "
-        "First lens: the Classifier Lens consumed by Chimera Secured."
-    ),
-)
-
-
-@app.on_event("startup")
-def _startup() -> None:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     log.info("starting %s v%s", SERVICE_NAME, SERVICE_VERSION)
     init_schema()
     # Warm up the background corpus so the first enrollment doesn't stall.
@@ -82,6 +80,71 @@ def _startup() -> None:
         log.info("background corpus ready: %d texts", len(corpus))
     except Exception as e:
         log.error("background corpus init failed: %s (enrollments will fail)", e)
+    yield
+
+
+# ---- App ---------------------------------------------------------------
+
+app = FastAPI(
+    title="CPA — Communication Personality Analyzer",
+    version=SERVICE_VERSION,
+    description=(
+        "Builds per-user Communication Personality Profiles (CPPs) from "
+        "email history and scores new emails against those profiles. "
+        "First lens: the Classifier Lens consumed by Chimera Secured."
+    ),
+    lifespan=lifespan,
+)
+
+
+# ---- API Key Auth Middleware -------------------------------------------
+
+CPA_API_KEY = os.environ.get("CPA_API_KEY", "").strip()
+
+# Paths that don't require auth
+AUTH_EXEMPT_PATHS = {"/health", "/docs", "/openapi.json", "/redoc", "/dashboard"}
+
+
+class APIKeyMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if not CPA_API_KEY:
+            # No key configured → auth disabled (local dev)
+            return await call_next(request)
+
+        path = request.url.path.rstrip("/")
+        if path in AUTH_EXEMPT_PATHS or path.startswith("/static"):
+            return await call_next(request)
+
+        provided = request.headers.get("X-API-Key", "")
+        if provided != CPA_API_KEY:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid or missing API key. Set X-API-Key header."},
+            )
+        return await call_next(request)
+
+
+app.add_middleware(APIKeyMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---- Static files & Dashboard -----------------------------------------
+
+STATIC_DIR = Path(__file__).parent.parent / "static"
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard():
+    dashboard_path = STATIC_DIR / "dashboard.html"
+    if dashboard_path.exists():
+        return FileResponse(str(dashboard_path))
+    return HTMLResponse("<h1>Dashboard not found. Place dashboard.html in cpa/static/</h1>", status_code=404)
 
 
 # ---- Health ------------------------------------------------------------
@@ -219,10 +282,9 @@ def cpp_status(tenant_id: str, user_email: str) -> CPPStatusResponse:
     if cpp_row is None:
         return CPPStatusResponse(exists=False)
 
-    # tw_coverage_json is stored as a stringified dict; parse it loosely.
-    import ast
+    import json
     try:
-        coverage = ast.literal_eval(cpp_row.tw_coverage_json or "{}")
+        coverage = json.loads(cpp_row.tw_coverage_json or "{}")
     except Exception:
         coverage = {}
 
@@ -239,6 +301,63 @@ def cpp_status(tenant_id: str, user_email: str) -> CPPStatusResponse:
             if (mirror_row and mirror_row.last_mirrored_at)
             else None
         ),
+    )
+
+
+# ---- Voice profile -----------------------------------------------------
+
+@app.get("/voice-profile", response_model=VoiceProfileResponse)
+def voice_profile(tenant_id: str, user_email: str) -> VoiceProfileResponse:
+    """
+    Generate a natural-language writing style guide from the user's CPP.
+    The guide can be copy-pasted into ChatGPT, Gemini, Copilot, etc.
+    as a system instruction to get that LLM to write in this user's voice.
+    """
+    user_sha = email_sha256(user_email)
+
+    with connection() as conn:
+        cpp_row = conn.execute(
+            select(cpps_t).where(
+                (cpps_t.c.tenant_id == tenant_id) & (cpps_t.c.email_sha256 == user_sha)
+            )
+        ).first()
+
+    if cpp_row is None:
+        return VoiceProfileResponse(exists=False)
+
+    # Load voice stats from disk
+    voice_stats_path = cpp_row.voice_stats_path
+    if not voice_stats_path:
+        return VoiceProfileResponse(
+            exists=False,
+            summary="Voice stats not available. Re-enroll to generate.",
+        )
+
+    import json as _json
+    stats_path = Path(voice_stats_path)
+    if not stats_path.exists():
+        return VoiceProfileResponse(
+            exists=False,
+            summary="Voice stats file missing. Re-enroll to generate.",
+        )
+
+    with stats_path.open() as f:
+        voice_stats_data = _json.load(f)
+
+    from voice_profile import generate_voice_profile
+    profile = generate_voice_profile(voice_stats_data)
+
+    return VoiceProfileResponse(
+        exists=True,
+        formality_score=profile.formality_score,
+        email_count=profile.email_count,
+        summary=profile.summary,
+        sections=[
+            {"number": s.number, "title": s.title, "emoji": s.emoji, "body": s.body}
+            for s in profile.sections
+        ],
+        prompt_text=profile.to_prompt_text(),
+        markdown=profile.to_markdown(),
     )
 
 
@@ -288,3 +407,112 @@ def label(req: SetLabelRequest) -> SetLabelResponse:
 @app.get("/labeling-progress", response_model=LabelingProgressResponse)
 def progress(tenant_id: str, user_id: str) -> LabelingProgressResponse:
     return LabelingProgressResponse(**labeling_progress(tenant_id, user_id))
+
+
+# ---- Graph-based enrollment (convenience endpoint) ----------------------
+
+class GraphEnrollRequest(BaseModel):
+    """Enroll a user by pulling their sent mail directly from Graph API."""
+    tenant_id: str = "default"
+    user_email: str
+    max_emails: int = 2000
+
+
+class GraphEnrollResponse(BaseModel):
+    status: str
+    user_email: str
+    emails_fetched: int = 0
+    cpp_version: str | None = None
+    content_hash: str | None = None
+    training_email_count: int | None = None
+    message: str
+
+
+from pydantic import BaseModel as BaseModel  # already imported, just for clarity
+
+
+@app.post("/enroll-from-graph", response_model=GraphEnrollResponse)
+def enroll_from_graph(req: GraphEnrollRequest) -> GraphEnrollResponse:
+    """
+    One-click enrollment: pull sent emails from Graph API, then enroll.
+    Requires AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET env vars.
+    """
+    try:
+        from graph_connector import fetch_sent_emails, resolve_user
+    except ImportError:
+        raise HTTPException(
+            status_code=501,
+            detail="Graph connector not available. Install msal and httpx.",
+        )
+
+    azure_tenant = os.environ.get("AZURE_TENANT_ID", "")
+    if not azure_tenant:
+        raise HTTPException(
+            status_code=503,
+            detail="Azure AD credentials not configured. Set AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET.",
+        )
+
+    log.info("enroll-from-graph: fetching emails for %s", req.user_email)
+
+    try:
+        raw_emails = fetch_sent_emails(req.user_email, max_emails=req.max_emails)
+    except Exception as e:
+        log.exception("Graph fetch failed for %s: %s", req.user_email, e)
+        raise HTTPException(status_code=502, detail=f"Failed to fetch emails from Graph: {e}")
+
+    if not raw_emails:
+        return GraphEnrollResponse(
+            status="error",
+            user_email=req.user_email,
+            message=f"No sent emails found for {req.user_email} in Graph API.",
+        )
+
+    # Convert to the enrollment format
+    import hashlib
+    user_id = hashlib.sha256(req.user_email.lower().encode()).hexdigest()[:16]
+
+    # Use the standard /enroll logic
+    from background_corpus import BackgroundCorpus
+    from config import MIN_EMAILS_FOR_HEAD
+    corpus = BackgroundCorpus.load()
+    if len(corpus) < MIN_EMAILS_FOR_HEAD:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Background corpus has {len(corpus)} texts (need {MIN_EMAILS_FOR_HEAD}). Seed it first.",
+        )
+
+    enrollment_emails = [
+        RawEmail(recipient_email=e["recipient_email"], body=e["body"], sent_at=e.get("sent_at"))
+        for e in raw_emails
+    ]
+
+    try:
+        result = enroll_user(
+            tenant_id=req.tenant_id,
+            user_id=user_id,
+            user_email=req.user_email,
+            raw_emails=enrollment_emails,
+            background_corpus=corpus,
+        )
+    except ValueError as e:
+        return GraphEnrollResponse(
+            status="error",
+            user_email=req.user_email,
+            emails_fetched=len(raw_emails),
+            message=str(e),
+        )
+    except Exception as e:
+        log.exception("Enrollment failed for %s: %s", req.user_email, e)
+        raise HTTPException(status_code=500, detail=f"Enrollment failed: {e}")
+
+    invalidate_cpp_cache()
+
+    return GraphEnrollResponse(
+        status="success",
+        user_email=req.user_email,
+        emails_fetched=len(raw_emails),
+        cpp_version=result.cpp_version,
+        content_hash=result.content_hash,
+        training_email_count=result.training_email_count,
+        message=f"Enrolled {req.user_email}: {result.training_email_count} training emails, {len(result.buckets_trained)} buckets trained.",
+    )

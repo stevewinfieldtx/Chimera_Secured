@@ -32,6 +32,7 @@ Design notes for next-Claude:
 """
 from __future__ import annotations
 
+import json
 import logging
 import pickle
 import uuid
@@ -60,6 +61,7 @@ from features import FeatureExtractor
 from hashing import compute_cpp_hash
 from pii_scrub import scrub
 from preprocessing import preprocess
+from voice_stats import compute_voice_stats
 
 log = logging.getLogger(__name__)
 
@@ -212,6 +214,12 @@ def enroll_user(
     for cls in classifications:
         predictor.set_label(cls.recipient_email, cls.tw_bucket, source="auto")
 
+    # ---- Step 8b: compute voice stats for exportable style guide --------
+
+    all_training_texts = [body for _email, body in cleaned]
+    voice_stats_data = compute_voice_stats(all_training_texts)
+    log.info("enroll_user: voice_stats computed (%d emails)", voice_stats_data.get("email_count", 0))
+
     # ---- Step 9: write artifacts to disk -------------------------------
 
     art_root = ARTIFACTS_DIR / tenant_id / user_sha / cpp_version
@@ -229,6 +237,10 @@ def enroll_user(
 
     tw_predictor_path = art_root / "tw_predictor.pkl"
     predictor.save(tw_predictor_path)
+
+    voice_stats_path = art_root / "voice_stats.json"
+    with voice_stats_path.open("w") as f:
+        json.dump(voice_stats_data, f, indent=2)
 
     # ---- Step 10: compute content hash ---------------------------------
 
@@ -271,8 +283,9 @@ def enroll_user(
             head_tw_plus_path=str(head_paths.get("TW_PLUS", "")) or None,
             tw_predictor_path=str(tw_predictor_path),
             feature_config_path=str(extractor_path),
+            voice_stats_path=str(voice_stats_path),
             training_email_count=len(cleaned),
-            tw_coverage_json=str(coverage),
+            tw_coverage_json=json.dumps(coverage),
             trained_at=now,
             created_at=now,
             updated_at=now,

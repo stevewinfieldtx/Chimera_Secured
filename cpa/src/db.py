@@ -58,6 +58,7 @@ cpps = Table(
     Column("head_tw_plus_path", String, nullable=True),
     Column("tw_predictor_path", String, nullable=True),
     Column("feature_config_path", String, nullable=True),
+    Column("voice_stats_path", String, nullable=True),
     # Metadata
     Column("training_email_count", Integer, nullable=False, default=0),
     Column("tw_coverage_json", Text, nullable=True),  # {"TW_PLUS": 42, ...}

@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chimera Secured — MSP Pilot Program Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #fafafa;
+  --bg-dark: #0a0a0a;
+  --surface: #ffffff;
+  --surface-dark: #111113;
+  --border: #e5e5e5;
+  --border-dark: #222226;
+  --text-primary: #0a0a0a;
+  --text-secondary: #6b6b6b;
+  --text-tertiary: #999;
+  --text-on-dark: #f0f0f0;
+  --text-on-dark-secondary: #a0a0a5;
+  --accent: #2563eb;
+  --accent-light: #3b82f6;
+  --accent-glow: rgba(37, 99, 235, 0.15);
+  --accent-gradient: linear-gradient(135deg, #2563eb, #7c3aed);
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --radius: 12px;
+  --radius-lg: 20px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.06);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.08);
+  --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+
+html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+body { font-family: var(--font); color: var(--text-primary); background: var(--bg); overflow-x: hidden; }
+h1, h2, h3, h4 { font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+p, li { line-height: 1.75; }
+
+/* ---- Navigation ---- */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+  background: rgba(250,250,250,0.85); backdrop-filter: blur(20px) saturate(1.8);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner {
+  max-width: 960px; margin: 0 auto; padding: 0 24px;
+  display: flex; align-items: center; justify-content: space-between; height: 56px;
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 10px;
+  font-weight: 700; font-size: 0.95rem; color: var(--text-primary); text-decoration: none;
+}
+.nav-logo svg { width: 24px; height: 24px; }
+.nav-links { display: flex; gap: 24px; align-items: center; }
+.nav-links a {
+  font-size: 0.8rem; font-weight: 500; color: var(--text-secondary);
+  text-decoration: none; transition: var(--transition);
+}
+.nav-links a:hover { color: var(--text-primary); }
+.nav-badge {
+  font-size: 0.7rem; font-weight: 600; background: var(--accent-glow);
+  color: var(--accent); padding: 3px 10px; border-radius: 100px;
+}
+
+/* ---- Content Layout ---- */
+.container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+/* ---- Hero ---- */
+.hero {
+  padding: 140px 0 80px; text-align: center;
+  background: var(--bg-dark); color: var(--text-on-dark);
+  position: relative; overflow: hidden;
+}
+.hero::after {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 120%, rgba(37,99,235,0.12), transparent 70%);
+  pointer-events: none;
+}
+.hero-content { position: relative; z-index: 2; }
+.hero h1 {
+  font-size: clamp(2rem, 4vw, 3rem); color: white; margin-bottom: 16px;
+}
+.hero h1 span {
+  background: var(--accent-gradient);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.hero p {
+  font-size: 1.1rem; color: var(--text-on-dark-secondary);
+  max-width: 580px; margin: 0 auto 32px;
+}
+.hero-meta {
+  display: flex; justify-content: center; gap: 24px; flex-wrap: wrap;
+  font-size: 0.8rem; color: var(--text-on-dark-secondary);
+}
+.hero-meta span { display: flex; align-items: center; gap: 6px; }
+
+/* ---- Sidebar TOC ---- */
+.page-body { display: grid; grid-template-columns: 220px 1fr; gap: 48px; padding: 64px 24px; max-width: 1200px; margin: 0 auto; }
+.toc {
+  position: sticky; top: 80px; align-self: start;
+  max-height: calc(100vh - 100px); overflow-y: auto;
+}
+.toc-label {
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--text-tertiary); margin-bottom: 16px;
+}
+.toc a {
+  display: block; font-size: 0.8rem; color: var(--text-secondary);
+  text-decoration: none; padding: 6px 0 6px 12px;
+  border-left: 2px solid transparent; transition: var(--transition);
+}
+.toc a:hover { color: var(--text-primary); border-left-color: var(--border); }
+.toc a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
+.toc a.toc-h1 { font-weight: 600; color: var(--text-primary); margin-top: 12px; }
+.toc a.toc-h3 { padding-left: 24px; font-size: 0.75rem; }
+
+/* ---- Article Content ---- */
+.article { min-width: 0; }
+.article h1 {
+  font-size: 1.8rem; margin: 64px 0 16px; padding-top: 24px;
+  border-top: 2px solid var(--border);
+}
+.article h1:first-child { margin-top: 0; border-top: none; padding-top: 0; }
+.article h2 {
+  font-size: 1.35rem; color: var(--accent); margin: 40px 0 12px;
+}
+.article h3 { font-size: 1.05rem; margin: 28px 0 8px; }
+.article p { color: var(--text-secondary); margin-bottom: 16px; }
+.article ul, .article ol {
+  margin: 0 0 16px 20px; color: var(--text-secondary);
+}
+.article li { margin-bottom: 6px; }
+.article strong { color: var(--text-primary); }
+.article em { font-style: italic; }
+
+/* ---- Callout boxes ---- */
+.callout {
+  background: var(--accent-glow); border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 16px 20px; margin: 20px 0;
+}
+.callout p { color: var(--text-primary); margin: 0; font-size: 0.9rem; }
+.callout-warn {
+  background: rgba(245,158,11,0.08); border-left-color: var(--warning);
+}
+.callout-success {
+  background: rgba(16,185,129,0.08); border-left-color: var(--success);
+}
+
+/* ---- Tables ---- */
+.article table {
+  width: 100%; border-collapse: collapse; margin: 16px 0 24px;
+  font-size: 0.85rem;
+}
+.article th {
+  background: var(--bg-dark); color: white; font-weight: 600;
+  text-align: left; padding: 10px 14px;
+}
+.article th:first-child { border-radius: var(--radius) 0 0 0; }
+.article th:last-child { border-radius: 0 var(--radius) 0 0; }
+.article td {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.article tr:nth-child(even) td { background: #f8f8f8; }
+.article code {
+  font-family: var(--mono); font-size: 0.85em;
+  background: #f0f0f0; padding: 2px 6px; border-radius: 4px;
+}
+
+/* ---- Phase cards ---- */
+.phase-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px; margin: 20px 0;
+}
+.phase-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px;
+  transition: var(--transition);
+}
+.phase-card:hover { border-color: #ccc; box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+.phase-num {
+  font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+  color: var(--accent); background: var(--accent-glow);
+  padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 8px;
+}
+.phase-card h4 { font-size: 0.95rem; margin-bottom: 6px; }
+.phase-card p { font-size: 0.82rem; margin: 0; }
+.phase-week { font-family: var(--mono); font-size: 0.75rem; color: var(--text-tertiary); margin-top: 8px; }
+
+/* ---- Template sections ---- */
+.template-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 32px; margin: 24px 0;
+  box-shadow: var(--shadow-sm);
+}
+.template-box h3 { margin-top: 0; }
+.template-box .email-line {
+  font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 12px;
+}
+
+/* ---- Threshold badges ---- */
+.threshold-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px; margin: 16px 0;
+}
+.threshold-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; text-align: center;
+}
+.threshold-card h4 { font-size: 0.9rem; margin-bottom: 8px; }
+.threshold-val {
+  font-family: var(--mono); font-size: 1.1rem; font-weight: 700; color: var(--accent);
+}
+.threshold-label { font-size: 0.75rem; color: var(--text-tertiary); margin-top: 4px; }
+
+/* ---- Footer ---- */
+footer {
+  padding: 48px 0; background: var(--bg-dark); border-top: 1px solid var(--border-dark);
+  margin-top: 80px;
+}
+.footer-inner {
+  display: flex; justify-content: space-between; align-items: center;
+  max-width: 960px; margin: 0 auto; padding: 0 24px;
+}
+.footer-brand { font-size: 0.8rem; color: var(--text-on-dark-secondary); }
+.footer-links { display: flex; gap: 20px; }
+.footer-links a {
+  font-size: 0.8rem; color: var(--text-on-dark-secondary);
+  text-decoration: none; transition: var(--transition);
+}
+.footer-links a:hover { color: white; }
+
+/* ---- Print ---- */
+@media print {
+  nav, .toc { display: none; }
+  .page-body { grid-template-columns: 1fr; padding-top: 0; }
+  .hero { padding: 40px 0; }
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 800px) {
+  .page-body { grid-template-columns: 1fr; }
+  .toc { display: none; }
+  .nav-links { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo">
+      <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="28" height="28" rx="7" fill="#0a0a0a"/>
+        <path d="M8 14C8 10.686 10.686 8 14 8c1.82 0 3.44.81 4.54 2.09" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"/>
+        <path d="M20 14c0 3.314-2.686 6-6 6-1.82 0-3.44-.81-4.54-2.09" stroke="#7c3aed" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="14" cy="14" r="2.5" fill="white"/>
+      </svg>
+      Chimera Secured
+    </a>
+    <div class="nav-links">
+      <a href="#part1">Overview</a>
+      <a href="#part2">Setup</a>
+      <a href="#part3">Managing</a>
+      <a href="#part4">Testing</a>
+      <a href="#part5">Technical</a>
+      <a href="#templates">Templates</a>
+      <span class="nav-badge">Partner Guide</span>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="container hero-content">
+    <h1>MSP <span>Pilot Program</span> Guide</h1>
+    <p>Everything you need to deploy, manage, and validate a Chimera Secured pilot for your clients. From first setup to decision gate.</p>
+    <div class="hero-meta">
+      <span>Version 1.0</span>
+      <span>|</span>
+      <span>April 2026</span>
+      <span>|</span>
+      <span>Confidential — Partner Distribution Only</span>
+    </div>
+  </div>
+</section>
+
+<!-- BODY -->
+<div class="page-body">
+
+  <!-- SIDEBAR TOC -->
+  <aside class="toc" id="toc">
+    <div class="toc-label">On This Page</div>
+    <a href="#part1" class="toc-h1">Part 1: Executive Overview</a>
+    <a href="#what-is" class="toc-h3">What Is Chimera Secured?</a>
+    <a href="#why-msps" class="toc-h3">Why MSPs Should Offer This</a>
+    <a href="#pilot-structure" class="toc-h3">Pilot Program Structure</a>
+    <a href="#success-criteria" class="toc-h3">Pilot Success Criteria</a>
+    <a href="#part2" class="toc-h1">Part 2: Setup & Deployment</a>
+    <a href="#prerequisites" class="toc-h3">Prerequisites</a>
+    <a href="#step-by-step" class="toc-h3">Step-by-Step Deployment</a>
+    <a href="#part3" class="toc-h1">Part 3: Managing the Pilot</a>
+    <a href="#dashboard" class="toc-h3">Dashboard Overview</a>
+    <a href="#weekly-cadence" class="toc-h3">Weekly Review Cadence</a>
+    <a href="#thresholds" class="toc-h3">Threshold Configuration</a>
+    <a href="#part4" class="toc-h1">Part 4: Testing & Validation</a>
+    <a href="#test1" class="toc-h3">Baseline Verification</a>
+    <a href="#test2" class="toc-h3">Style-Deviation Detection</a>
+    <a href="#test3" class="toc-h3">BEC Simulation</a>
+    <a href="#test4" class="toc-h3">False-Positive Stress Test</a>
+    <a href="#part5" class="toc-h1">Part 5: Technical Appendix</a>
+    <a href="#api" class="toc-h3">API Reference</a>
+    <a href="#data-flow" class="toc-h3">Data Flow Summary</a>
+    <a href="#troubleshooting" class="toc-h3">Troubleshooting</a>
+    <a href="#templates" class="toc-h1">Client Templates</a>
+  </aside>
+
+  <!-- ARTICLE -->
+  <main class="article">
+
+    <!-- ====== PART 1 ====== -->
+    <h1 id="part1">Part 1: Executive Overview</h1>
+
+    <h2 id="what-is">What Is Chimera Secured?</h2>
+    <p>Chimera Secured is a behavioral email security platform that detects Business Email Compromise (BEC) by analyzing <em>how</em> each person writes, not what they say. It builds a multi-dimensional behavioral fingerprint for every protected mailbox and flags emails that deviate from the owner's unconscious writing patterns — even when the email comes from the real, authenticated account.</p>
+    <p>Unlike traditional email security tools that rely on known threat signatures, reputation scoring, or content-keyword rules, Chimera Secured catches attacks that use legitimate credentials and clean language — the exact scenario that BEC exploits.</p>
+
+    <h2 id="why-msps">Why MSPs Should Offer This</h2>
+    <ul>
+      <li><strong>BEC is the #1 cybercrime by dollar loss:</strong> $2.9B reported to FBI IC3 in 2023 alone.</li>
+      <li><strong>Traditional SEGs and DMARC don't catch account-takeover BEC</strong> — the attacker is inside the mailbox.</li>
+      <li><strong>Runs inside the customer's M365 tenant.</strong> Email bodies never leave their environment, eliminating the most common objection to third-party email scanning.</li>
+      <li><strong>Recurring revenue model:</strong> Per-mailbox monthly licensing with tiered pricing for MSP partners.</li>
+      <li><strong>Genuine differentiator:</strong> No competing product uses behavioral stylometry at this depth.</li>
+    </ul>
+
+    <h2 id="pilot-structure">Pilot Program Structure</h2>
+    <p>Every Chimera Secured deployment begins with a structured pilot. The pilot proves detection accuracy on the customer's real email traffic before any enforcement actions are taken.</p>
+
+    <div class="phase-grid">
+      <div class="phase-card">
+        <span class="phase-num">Phase 1</span>
+        <h4>Setup & Enrollment</h4>
+        <p>Deploy container, connect M365, enroll initial mailboxes, build behavioral profiles.</p>
+        <div class="phase-week">Week 1</div>
+      </div>
+      <div class="phase-card">
+        <span class="phase-num">Phase 2</span>
+        <h4>Shadow Mode</h4>
+        <p>Chimera scores every inbound email silently. No user-visible actions. MSP reviews detection dashboard.</p>
+        <div class="phase-week">Weeks 2–4</div>
+      </div>
+      <div class="phase-card">
+        <span class="phase-num">Phase 3</span>
+        <h4>Tuning</h4>
+        <p>Review false-positive rate. Adjust per-group thresholds. MSP and customer approve accuracy.</p>
+        <div class="phase-week">Week 5</div>
+      </div>
+      <div class="phase-card">
+        <span class="phase-num">Phase 4</span>
+        <h4>Warn Mode</h4>
+        <p>Flagged emails generate alerts to the security team. No blocking yet. Validate alert quality.</p>
+        <div class="phase-week">Weeks 6–8</div>
+      </div>
+      <div class="phase-card">
+        <span class="phase-num">Phase 5</span>
+        <h4>Decision Gate</h4>
+        <p>Customer decides: continue in warn mode, escalate to enforce mode, or expand scope.</p>
+        <div class="phase-week">Week 9</div>
+      </div>
+    </div>
+
+    <h2 id="success-criteria">Pilot Success Criteria</h2>
+    <p>A pilot is considered successful when the following thresholds are met:</p>
+    <ul>
+      <li>False-positive rate &lt; 2% across all monitored mailboxes.</li>
+      <li>Detection demonstrated on at least one simulated BEC scenario.</li>
+      <li>Behavioral profiles successfully built for 90%+ of enrolled mailboxes.</li>
+      <li>Customer security team confirms dashboard visibility and alert quality.</li>
+      <li>No email bodies observed leaving the customer's M365 tenant boundary.</li>
+    </ul>
+
+    <!-- ====== PART 2 ====== -->
+    <h1 id="part2">Part 2: Setup & Deployment</h1>
+
+    <h2 id="prerequisites">Prerequisites</h2>
+
+    <h3>Customer Environment</h3>
+    <ul>
+      <li>Microsoft 365 tenant (Business Premium, E3, or E5).</li>
+      <li>Exchange Online mailboxes (not on-prem Exchange).</li>
+      <li>Global Admin or Exchange Admin credentials for initial consent.</li>
+      <li>Azure AD app registration permissions.</li>
+      <li>Docker or container runtime in tenant infrastructure (ACI, AKS, or equivalent).</li>
+    </ul>
+
+    <h3>MSP Requirements</h3>
+    <ul>
+      <li>Access to the Chimera Secured Partner Portal for license keys and container images.</li>
+      <li>Familiarity with M365 Admin Center and Azure AD app registrations.</li>
+      <li>Designated pilot lead on the MSP side (single point of contact).</li>
+    </ul>
+
+    <h2 id="step-by-step">Step-by-Step Deployment</h2>
+
+    <h3>Step 1: Register the Azure AD Application</h3>
+    <p>Chimera Secured requires an Azure AD app registration to read email metadata and sent-mail history via the Microsoft Graph API.</p>
+
+    <table>
+      <tr><th>Permission</th><th>Type</th><th>Purpose</th></tr>
+      <tr><td><code>Mail.Read</code></td><td>Application</td><td>Read sent-mail history for behavioral profile enrollment.</td></tr>
+      <tr><td><code>Mail.ReadBasic</code></td><td>Application</td><td>Read message metadata for session-anomaly detection.</td></tr>
+      <tr><td><code>User.Read.All</code></td><td>Application</td><td>Resolve mailbox ownership and directory lookups.</td></tr>
+      <tr><td><code>MailboxSettings.Read</code></td><td>Application</td><td>Read mailbox config for send-time pattern baselines.</td></tr>
+    </table>
+
+    <div class="callout">
+      <p><strong>Important:</strong> The Mail.Read permission is used exclusively during the one-time enrollment phase. After enrollment completes, the system operates on real-time mail-flow events and does not re-read historical mailbox contents.</p>
+    </div>
+
+    <h3>Step 2: Deploy the Analysis Container</h3>
+    <ol>
+      <li>Log in to the Chimera Secured Partner Portal and generate a deployment token.</li>
+      <li>Pull the container image using the provided registry credentials.</li>
+      <li>Deploy to Azure Container Instances (ACI) or AKS within the customer's subscription.</li>
+      <li>Configure the required environment variables (see Step 3).</li>
+      <li>Verify the container starts and the <code>/health</code> endpoint returns 200.</li>
+    </ol>
+
+    <h3>Step 3: Environment Configuration</h3>
+    <table>
+      <tr><th>Variable</th><th>Required</th><th>Description</th></tr>
+      <tr><td><code>TENANT_ID</code></td><td>Yes</td><td>The customer's Azure AD tenant ID.</td></tr>
+      <tr><td><code>CLIENT_ID</code></td><td>Yes</td><td>The app registration's Application (client) ID.</td></tr>
+      <tr><td><code>CLIENT_SECRET</code></td><td>Yes</td><td>The app registration's client secret. Rotate every 90 days.</td></tr>
+      <tr><td><code>DATABASE_URL</code></td><td>Yes</td><td>Connection string for the local profile database.</td></tr>
+      <tr><td><code>CPA_MIRROR_URL</code></td><td>Optional</td><td>Chimera Cloud endpoint for anonymized fingerprint mirroring.</td></tr>
+      <tr><td><code>CPA_MIRROR_API_KEY</code></td><td>Optional</td><td>API key for the mirror endpoint.</td></tr>
+      <tr><td><code>CPA_LOG_LEVEL</code></td><td>Optional</td><td>DEBUG, INFO (default), WARNING, ERROR.</td></tr>
+      <tr><td><code>CPA_MAX_ENROLL_EMAILS</code></td><td>Optional</td><td>Max sent emails per user during enrollment. Default: 2000.</td></tr>
+    </table>
+
+    <h3>Step 4: Enroll Initial Mailboxes</h3>
+    <p>Start with a targeted set of high-value mailboxes for the pilot:</p>
+    <ul>
+      <li><strong>C-suite executives</strong> (CEO, CFO, COO) — highest BEC target value.</li>
+      <li><strong>Finance team leads</strong> — wire-transfer authority.</li>
+      <li><strong>HR leadership</strong> — payroll and PII access.</li>
+      <li><strong>IT administrators</strong> — credential and infrastructure access.</li>
+    </ul>
+
+    <div class="callout callout-success">
+      <p><strong>Recommended pilot size:</strong> 10–50 mailboxes. Large enough to validate detection accuracy across writing styles, small enough to manage hands-on during the pilot.</p>
+    </div>
+
+    <p>Enrollment is triggered per-mailbox via the admin dashboard or API. The system reads the user's sent-mail history, builds a multi-dimensional behavioral profile, then discards the raw email content. Only the abstract behavioral fingerprint is retained. Enrollment takes 30–120 seconds per mailbox.</p>
+
+    <h3>Step 5: Verify Shadow Mode</h3>
+    <ol>
+      <li>Open the admin dashboard and confirm all enrolled mailboxes show "Profile Active" status.</li>
+      <li>Send a test email from an enrolled mailbox and confirm it appears in the scoring log.</li>
+      <li>Confirm that no mail-flow disruption has occurred — Chimera operates in read-only mode.</li>
+      <li>Review the <code>/health</code> endpoint: verify <code>db_healthy=true</code> and <code>background_corpus_size > 0</code>.</li>
+    </ol>
+
+    <!-- ====== PART 3 ====== -->
+    <h1 id="part3">Part 3: Managing the Pilot</h1>
+
+    <h2 id="dashboard">Dashboard Overview</h2>
+
+    <h3>Detection Feed</h3>
+    <p>A real-time stream of scored emails. Each entry shows: sender, recipient, authenticity score (0–1.0), confidence level, which analysis layer(s) fired, and the content-risk classification.</p>
+
+    <h3>Profile Health</h3>
+    <p>Per-mailbox view showing: profile version, training email count, coverage across communication tiers (formal/standard/casual), last-updated timestamp, and any warnings.</p>
+
+    <h3>Relationship Labels</h3>
+    <p>The auto-classification system assigns each recipient a communication tier. The labeling queue lets the MSP or customer security team review and override these assignments to improve detection accuracy.</p>
+
+    <h2 id="weekly-cadence">Weekly Pilot Review Cadence</h2>
+
+    <table>
+      <tr><th>Check</th><th>Where to Look</th><th>Action If Abnormal</th></tr>
+      <tr><td>False-positive rate</td><td>Detection Feed &rarr; Filter: score &lt; 0.3, confidence &gt; 0.6</td><td>Review flagged emails. Check relationship labels.</td></tr>
+      <tr><td>Profile coverage</td><td>Profile Health page</td><td>Re-enroll mailboxes with warnings.</td></tr>
+      <tr><td>Scoring volume</td><td>Detection Feed &rarr; 24h count</td><td>If zero, check container health and mail-flow hook.</td></tr>
+      <tr><td>Relationship labels</td><td>Labeling Queue &rarr; "Needs Review"</td><td>Resolve flagged labels. Prioritize high-volume recipients.</td></tr>
+      <tr><td>Container health</td><td><code>GET /health</code></td><td>Restart container if <code>db_healthy=false</code>.</td></tr>
+    </table>
+
+    <h2 id="thresholds">Threshold Configuration</h2>
+    <p>Chimera Secured uses per-group threshold policies that control when detection events are escalated.</p>
+
+    <div class="threshold-grid">
+      <div class="threshold-card">
+        <h4>Executives</h4>
+        <div class="threshold-val">&lt; 0.35</div>
+        <div class="threshold-label">Alert Threshold</div>
+      </div>
+      <div class="threshold-card">
+        <h4>Finance</h4>
+        <div class="threshold-val">&lt; 0.35</div>
+        <div class="threshold-label">Alert Threshold</div>
+      </div>
+      <div class="threshold-card">
+        <h4>General Staff</h4>
+        <div class="threshold-val">&lt; 0.25</div>
+        <div class="threshold-label">Alert Threshold</div>
+      </div>
+      <div class="threshold-card">
+        <h4>IT / Admin</h4>
+        <div class="threshold-val">&lt; 0.30</div>
+        <div class="threshold-label">Alert Threshold</div>
+      </div>
+    </div>
+
+    <div class="callout callout-warn">
+      <p><strong>Note:</strong> During Shadow Mode and Warn Mode, block thresholds are not enforced. They are configured in advance so the transition to Enforce Mode is a single toggle, not a reconfiguration.</p>
+    </div>
+
+    <!-- ====== PART 4 ====== -->
+    <h1 id="part4">Part 4: Testing & Validation</h1>
+
+    <p>A pilot that only runs in shadow mode and waits for a real attack proves nothing. Chimera Secured provides structured testing scenarios that demonstrate detection capability using controlled, safe simulations.</p>
+
+    <h2 id="test1">Test 1: Baseline Verification</h2>
+    <p><strong>Purpose:</strong> Confirm that legitimate emails from enrolled users score high (&gt; 0.7) with good confidence.</p>
+    <ol>
+      <li>Select 5 enrolled mailboxes with "Profile Active" status.</li>
+      <li>Have each user send 3 normal business emails to different recipients.</li>
+      <li>Wait 5 minutes for scoring to process.</li>
+      <li>Open the Detection Feed and filter by sender.</li>
+      <li>Verify each email scored &gt; 0.7 with confidence &gt; 0.5.</li>
+    </ol>
+    <div class="callout callout-success">
+      <p><strong>Expected:</strong> All 15 emails score as authentic. If any score below 0.7, check profile health and relationship labels.</p>
+    </div>
+
+    <h2 id="test2">Test 2: Style-Deviation Detection</h2>
+    <p><strong>Purpose:</strong> Confirm that emails written by a different person from the same mailbox are flagged.</p>
+    <ol>
+      <li>Select 3 enrolled mailboxes (with owner's permission).</li>
+      <li>Have someone <em>other than the mailbox owner</em> compose and send 2 emails from each account. The stand-in should write naturally — do not mimic the owner.</li>
+      <li>Wait 5 minutes for scoring.</li>
+      <li>Verify stand-in emails score significantly lower (typically &lt; 0.4).</li>
+    </ol>
+    <div class="callout callout-success">
+      <p><strong>Expected:</strong> Clear separation between owner-written and stand-in-written emails. This demonstrates the core detection capability.</p>
+    </div>
+
+    <h2 id="test3">Test 3: BEC Simulation</h2>
+    <p><strong>Purpose:</strong> Simulate a realistic BEC attack using Chimera Secured's built-in test harness.</p>
+    <ol>
+      <li>Access the Test Console from the admin dashboard.</li>
+      <li>Select target mailbox and attack tier.</li>
+      <li>The test harness generates a simulated BEC email through the scoring pipeline. No actual email is sent.</li>
+      <li>Review the score and analysis-layer breakdown.</li>
+    </ol>
+
+    <table>
+      <tr><th>Attack Tier</th><th>Description</th><th>Expected Detection</th></tr>
+      <tr><td>Tier 1: Generic</td><td>Standard BEC template. No personalization.</td><td>&gt; 99%</td></tr>
+      <tr><td>Tier 2: Context-Aware</td><td>Uses target's role, company, recent activity.</td><td>&gt; 95%</td></tr>
+      <tr><td>Tier 3: Style-Mimicking</td><td>AI-generated content mimicking target's style.</td><td>&gt; 88%</td></tr>
+    </table>
+
+    <h2 id="test4">Test 4: False-Positive Stress Test</h2>
+    <p><strong>Purpose:</strong> Confirm that edge-case legitimate emails are not flagged.</p>
+    <p>Test these scenarios from enrolled mailboxes:</p>
+    <ul>
+      <li>An email written in an unusual emotional state (formal user sends casual congrats).</li>
+      <li>A very short email (&lt; 15 words, e.g., "Approved. Please proceed.").</li>
+      <li>An email with heavy quoting/forwarding.</li>
+      <li>An email to a brand-new recipient not in training history.</li>
+    </ul>
+    <div class="callout callout-success">
+      <p><strong>Expected:</strong> Short emails return lower confidence (system knows it has less signal). Emotional-shift emails may score slightly lower but remain above alert threshold. New-recipient emails use fallback tier and should still score &gt; 0.6.</p>
+    </div>
+
+    <h3>Interpreting Results</h3>
+    <table>
+      <tr><th>Score</th><th>Confidence</th><th>Interpretation</th><th>Action</th></tr>
+      <tr><td>0.8 – 1.0</td><td>High</td><td>Strong match to owner's profile.</td><td>No action.</td></tr>
+      <tr><td>0.5 – 0.8</td><td>Medium</td><td>Partial match. Style shift or short email.</td><td>Review if high-risk content.</td></tr>
+      <tr><td>0.3 – 0.5</td><td>Med-High</td><td>Significant deviation. Multiple layers firing.</td><td>Investigate sender.</td></tr>
+      <tr><td>0.0 – 0.3</td><td>High</td><td>Minimal match. Strong impersonation signal.</td><td>Alert immediately.</td></tr>
+    </table>
+
+    <!-- ====== PART 5 ====== -->
+    <h1 id="part5">Part 5: Technical Appendix</h1>
+
+    <h2 id="api">API Reference</h2>
+    <p>All endpoints run inside the customer's tenant boundary.</p>
+
+    <table>
+      <tr><th>Endpoint</th><th>Method</th><th>Purpose</th></tr>
+      <tr><td><code>/health</code></td><td>GET</td><td>Container and database health check.</td></tr>
+      <tr><td><code>/enroll</code></td><td>POST</td><td>Build or refresh a behavioral profile for one user.</td></tr>
+      <tr><td><code>/score</code></td><td>POST</td><td>Score one email against a user's behavioral profile.</td></tr>
+      <tr><td><code>/cpp-status</code></td><td>GET</td><td>Query a user's profile metadata and mirror state.</td></tr>
+      <tr><td><code>/labeling-queue</code></td><td>GET</td><td>Retrieve recipient classification queue for review.</td></tr>
+      <tr><td><code>/label</code></td><td>POST</td><td>Submit or override a communication-tier label.</td></tr>
+      <tr><td><code>/labeling-progress</code></td><td>GET</td><td>Summary stats on labeling completion.</td></tr>
+    </table>
+
+    <h2 id="data-flow">Data Flow Summary</h2>
+    <table>
+      <tr><th>Data Type</th><th>Location</th><th>Crosses Boundary?</th></tr>
+      <tr><td>Email bodies</td><td>Customer M365 tenant</td><td>Never</td></tr>
+      <tr><td>Behavioral profiles</td><td>Customer container + optional Cloud mirror</td><td>Fingerprint only (if enabled)</td></tr>
+      <tr><td>Relationship labels</td><td>Customer container (local DB)</td><td>Never</td></tr>
+      <tr><td>Detection scores</td><td>Customer container (local DB)</td><td>Never</td></tr>
+      <tr><td>Anonymized signals</td><td>Chimera Cloud (opt-in only)</td><td>Yes (anonymized, no content)</td></tr>
+    </table>
+
+    <h3>Container Specifications</h3>
+    <table>
+      <tr><th>Spec</th><th>Value</th></tr>
+      <tr><td>Base image</td><td>Python 3.11 (slim)</td></tr>
+      <tr><td>Minimum RAM</td><td>512 MB</td></tr>
+      <tr><td>Recommended RAM</td><td>2 GB (1000+ mailboxes)</td></tr>
+      <tr><td>Disk per mailbox</td><td>~5 MB</td></tr>
+      <tr><td>Inbound port</td><td>8000 (place behind reverse proxy with TLS)</td></tr>
+    </table>
+
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <table>
+      <tr><th>Symptom</th><th>Likely Cause</th><th>Fix</th></tr>
+      <tr><td><code>/health</code> returns <code>db_healthy=false</code></td><td>DATABASE_URL misconfigured</td><td>Check env var and DB file permissions.</td></tr>
+      <tr><td>Enrollment returns 503</td><td>Background corpus not loaded</td><td>Wait 60s and retry. Check logs.</td></tr>
+      <tr><td>All scores 0.5 / confidence 0.0</td><td>No behavioral profile for user</td><td>Run enrollment first.</td></tr>
+      <tr><td>High false-positive rate</td><td>Low training volume</td><td>Re-enroll with more history. Review labels.</td></tr>
+      <tr><td>Scores not appearing</td><td>Mail-flow hook disconnected</td><td>Verify app permissions and event subscription.</td></tr>
+    </table>
+
+    <!-- ====== TEMPLATES ====== -->
+    <h1 id="templates">Client-Facing Templates</h1>
+
+    <div class="template-box">
+      <h3>Appendix A: Client Introduction Email</h3>
+      <p class="email-line"><strong>Subject:</strong> Enhancing Your Email Security — Chimera Secured Pilot Program</p>
+      <p>Hi [Client Contact Name],</p>
+      <p>As part of our ongoing commitment to strengthening your security posture, we're introducing a new layer of email protection: Chimera Secured.</p>
+      <p>Chimera Secured is a behavioral email security platform that detects Business Email Compromise by analyzing how each person in your organization writes. Unlike traditional email filters that look for known threats or suspicious links, Chimera detects when someone other than the real mailbox owner is writing from that account — even if the attacker has legitimate credentials.</p>
+      <p>Here's what you need to know about the pilot:</p>
+      <ul>
+        <li>It runs entirely inside your M365 tenant. Your email content never leaves your environment.</li>
+        <li>It starts in shadow mode — silent observation only. No emails will be blocked, flagged, or delayed.</li>
+        <li>We'll monitor results for 4–6 weeks and share a summary report.</li>
+        <li>If results meet success criteria, we'll discuss options for ongoing protection.</li>
+      </ul>
+      <p>We'll need brief access to your M365 Admin Center for initial setup (approximately 30 minutes of admin time). We'll handle the rest.</p>
+      <p>Would [date] work for a 30-minute kickoff call?</p>
+      <p>Best regards,<br>[MSP Contact Name]<br>[MSP Company]</p>
+    </div>
+
+    <div class="template-box">
+      <h3>Appendix B: Pilot Kickoff Meeting Agenda</h3>
+      <table>
+        <tr><th>Time</th><th>Topic</th><th>Owner</th></tr>
+        <tr><td>0:00 – 0:05</td><td>Welcome and introductions</td><td>MSP Lead</td></tr>
+        <tr><td>0:05 – 0:15</td><td>What is BEC and why behavioral detection matters</td><td>MSP Lead</td></tr>
+        <tr><td>0:15 – 0:25</td><td>How Chimera Secured works: data sovereignty, shadow mode</td><td>MSP Lead</td></tr>
+        <tr><td>0:25 – 0:30</td><td>Which mailboxes to enroll (agree on pilot scope)</td><td>Customer + MSP</td></tr>
+        <tr><td>0:30 – 0:40</td><td>M365 admin setup: app registration, permissions</td><td>MSP Engineer</td></tr>
+        <tr><td>0:40 – 0:45</td><td>Timeline, weekly check-ins, success criteria</td><td>MSP Lead</td></tr>
+        <tr><td>0:45 – 0:50</td><td>Q&A</td><td>All</td></tr>
+      </table>
+    </div>
+
+    <div class="template-box">
+      <h3>Appendix C: Weekly Status Report Template</h3>
+      <p><strong>Pilot:</strong> [Customer Name] — Chimera Secured</p>
+      <p><strong>Week:</strong> [#] of [Total] &nbsp; | &nbsp; <strong>Period:</strong> [Start] – [End] &nbsp; | &nbsp; <strong>Prepared by:</strong> [MSP Contact]</p>
+      <table>
+        <tr><th>Metric</th><th>Value</th><th>Target</th><th>Status</th></tr>
+        <tr><td>Emails scored</td><td>[number]</td><td>&gt; 100/day</td><td>[On Track / Below]</td></tr>
+        <tr><td>Avg authenticity score</td><td>[x.xx]</td><td>&gt; 0.75</td><td>[On Track / Review]</td></tr>
+        <tr><td>False positives</td><td>[number]</td><td>&lt; 2%</td><td>[On Track / Above]</td></tr>
+        <tr><td>Profiles active</td><td>[x/y]</td><td>90%+</td><td>[On Track / Below]</td></tr>
+        <tr><td>Simulated attacks detected</td><td>[x/y]</td><td>100% T1, 95% T2</td><td>[On Track / Review]</td></tr>
+      </table>
+      <p><strong>Observations:</strong> [Note anomalies, interesting detections, or patterns.]</p>
+      <p><strong>Actions for Next Week:</strong> [Adjustments, re-enrollments, threshold changes.]</p>
+      <p><strong>Customer Feedback:</strong> [Questions, concerns, or positive feedback.]</p>
+    </div>
+
+    <div class="template-box">
+      <h3>Appendix D: Pilot Success Criteria Worksheet</h3>
+      <p>Complete at the end of the pilot to determine whether to proceed with full deployment.</p>
+      <table>
+        <tr><th>Criterion</th><th>Target</th><th>Actual</th><th>Pass?</th></tr>
+        <tr><td>False-positive rate</td><td>&lt; 2%</td><td></td><td></td></tr>
+        <tr><td>Profiles active</td><td>&gt; 90% enrolled</td><td></td><td></td></tr>
+        <tr><td>Tier 1 attack detected</td><td>100%</td><td></td><td></td></tr>
+        <tr><td>Tier 2 attack detected</td><td>&gt; 95%</td><td></td><td></td></tr>
+        <tr><td>Tier 3 attack detected</td><td>&gt; 88%</td><td></td><td></td></tr>
+        <tr><td>Alert quality confirmed</td><td>SOC sign-off</td><td></td><td></td></tr>
+        <tr><td>Data sovereignty</td><td>Zero bodies cross boundary</td><td></td><td></td></tr>
+        <tr><td>No mail-flow disruption</td><td>Zero delivery issues</td><td></td><td></td></tr>
+        <tr><td>Customer approval</td><td>Written sign-off</td><td></td><td></td></tr>
+      </table>
+      <div class="callout" style="margin-top: 16px;">
+        <p><strong>Pilot result:</strong> If 8 of 9 criteria pass (including data sovereignty), the pilot is successful and the customer is recommended for full deployment.</p>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">&copy; 2026 NYN Impact / WinTech Partners — Confidential</div>
+    <div class="footer-links">
+      <a href="index.html">Landing Page</a>
+      <a href="#">Privacy</a>
+      <a href="#">Contact</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// Sticky TOC active-state tracking
+const tocLinks = document.querySelectorAll('.toc a');
+const sections = [];
+tocLinks.forEach(link => {
+  const id = link.getAttribute('href').slice(1);
+  const el = document.getElementById(id);
+  if (el) sections.push({ id, el, link });
+});
+
+function updateToc() {
+  let current = sections[0];
+  for (const s of sections) {
+    if (s.el.getBoundingClientRect().top <= 120) current = s;
+  }
+  tocLinks.forEach(l => l.classList.remove('active'));
+  if (current) current.link.classList.add('active');
+}
+window.addEventListener('scroll', updateToc);
+updateToc();
+</script>
+</body>
+</html>

@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chimera Secured — Admin Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0a0a0a; --surface: #111113; --surface-2: #1a1a1e;
+  --border: #222226; --border-light: #333;
+  --text: #f0f0f0; --text-2: #a0a0a5; --text-3: #666;
+  --accent: #3b82f6; --accent-dim: rgba(59,130,246,0.12);
+  --success: #10b981; --success-dim: rgba(16,185,129,0.12);
+  --warning: #f59e0b; --warning-dim: rgba(245,158,11,0.12);
+  --danger: #ef4444; --danger-dim: rgba(239,68,68,0.12);
+  --radius: 10px; --font: 'Inter', sans-serif; --mono: 'JetBrains Mono', monospace;
+}
+html { -webkit-font-smoothing: antialiased; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* ---- Layout ---- */
+.app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+.sidebar {
+  background: var(--surface); border-right: 1px solid var(--border);
+  padding: 20px 0; display: flex; flex-direction: column;
+}
+.sidebar-logo {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 20px 20px; border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.sidebar-logo svg { width: 24px; height: 24px; }
+.sidebar-logo span { font-weight: 700; font-size: 0.9rem; }
+.sidebar-nav a {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 20px; font-size: 0.85rem; color: var(--text-2);
+  text-decoration: none; transition: 0.2s; cursor: pointer;
+}
+.sidebar-nav a:hover { color: var(--text); background: var(--surface-2); }
+.sidebar-nav a.active { color: var(--accent); background: var(--accent-dim); border-right: 2px solid var(--accent); }
+.sidebar-nav a .icon { width: 18px; text-align: center; }
+.sidebar-footer { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); }
+.sidebar-footer .status-dot {
+  width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px;
+}
+.sidebar-footer .status-text { font-size: 0.75rem; color: var(--text-3); }
+
+.main { padding: 24px 32px; overflow-y: auto; }
+.main-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 24px;
+}
+.main-header h1 { font-size: 1.5rem; font-weight: 700; }
+
+/* ---- Config bar ---- */
+.config-bar {
+  display: flex; gap: 12px; align-items: center;
+  margin-bottom: 24px; flex-wrap: wrap;
+}
+.config-bar input, .config-bar select {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  font-family: var(--mono); font-size: 0.8rem; padding: 8px 12px;
+  border-radius: var(--radius); outline: none;
+}
+.config-bar input:focus { border-color: var(--accent); }
+.config-bar label { font-size: 0.75rem; color: var(--text-2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.config-group { display: flex; flex-direction: column; gap: 4px; }
+
+/* ---- Cards ---- */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 20px;
+}
+.stat-card .stat-label { font-size: 0.75rem; color: var(--text-2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+.stat-card .stat-value { font-size: 1.8rem; font-weight: 800; font-family: var(--mono); }
+.stat-card .stat-sub { font-size: 0.75rem; color: var(--text-3); margin-top: 4px; }
+
+/* ---- Button ---- */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font); font-size: 0.82rem; font-weight: 600;
+  padding: 8px 16px; border-radius: 8px; border: none;
+  cursor: pointer; transition: 0.2s; color: white;
+}
+.btn-primary { background: var(--accent); }
+.btn-primary:hover { background: #2563eb; }
+.btn-success { background: var(--success); }
+.btn-sm { padding: 5px 10px; font-size: 0.75rem; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---- Tables ---- */
+.panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; margin-bottom: 24px;
+}
+.panel-header {
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.panel-header h2 { font-size: 0.95rem; font-weight: 700; }
+.panel-header .badge {
+  font-size: 0.7rem; font-weight: 600; padding: 3px 8px;
+  border-radius: 100px;
+}
+.badge-blue { background: var(--accent-dim); color: var(--accent); }
+.badge-green { background: var(--success-dim); color: var(--success); }
+.badge-yellow { background: var(--warning-dim); color: var(--warning); }
+.badge-red { background: var(--danger-dim); color: var(--danger); }
+
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 0.7rem; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+td { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 0.85rem; color: var(--text-2); }
+tr:hover td { background: var(--surface-2); }
+.score-badge {
+  font-family: var(--mono); font-size: 0.8rem; font-weight: 600;
+  padding: 3px 8px; border-radius: 6px;
+}
+.score-high { background: var(--success-dim); color: var(--success); }
+.score-med { background: var(--warning-dim); color: var(--warning); }
+.score-low { background: var(--danger-dim); color: var(--danger); }
+
+/* ---- Enroll form ---- */
+.enroll-form {
+  display: flex; gap: 8px; align-items: flex-end;
+}
+.enroll-form input {
+  flex: 1; background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--mono); font-size: 0.85rem;
+  padding: 10px 14px; border-radius: var(--radius); outline: none;
+}
+.enroll-form input:focus { border-color: var(--accent); }
+
+/* ---- Toast ---- */
+.toast {
+  position: fixed; bottom: 24px; right: 24px; padding: 14px 20px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); font-size: 0.85rem; color: var(--text);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  transform: translateY(120%); transition: 0.3s; z-index: 999;
+}
+.toast.visible { transform: translateY(0); }
+.toast.error { border-color: var(--danger); }
+.toast.success { border-color: var(--success); }
+
+/* ---- Sections ---- */
+.section { display: none; }
+.section.active { display: block; }
+
+/* ---- Empty state ---- */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-3); }
+.empty-state p { font-size: 0.9rem; margin-bottom: 16px; }
+
+/* ---- Loading ---- */
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 768px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <svg viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="7" fill="#1a1a1e"/><path d="M8 14C8 10.686 10.686 8 14 8c1.82 0 3.44.81 4.54 2.09" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"/><path d="M20 14c0 3.314-2.686 6-6 6-1.82 0-3.44-.81-4.54-2.09" stroke="#7c3aed" stroke-width="2" stroke-linecap="round"/><circle cx="14" cy="14" r="2.5" fill="#e0e0e0"/></svg>
+      <span>Chimera Secured</span>
+    </div>
+    <nav class="sidebar-nav">
+      <a class="active" data-section="overview"><span class="icon">&#9632;</span> Overview</a>
+      <a data-section="enroll"><span class="icon">&#10010;</span> Enroll</a>
+      <a data-section="scoring"><span class="icon">&#9881;</span> Score Email</a>
+      <a data-section="profiles"><span class="icon">&#128100;</span> Profiles</a>
+      <a data-section="labels"><span class="icon">&#9776;</span> Labels</a>
+      <a data-section="voice"><span class="icon">&#127908;</span> Voice Profile</a>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="status-dot" id="health-dot" style="background: var(--text-3);"></span>
+      <span class="status-text" id="health-text">Checking...</span>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+
+    <!-- Config bar -->
+    <div class="config-bar">
+      <div class="config-group">
+        <label>CPA Base URL</label>
+        <input id="cfg-url" value="" placeholder="http://localhost:8000" style="width:260px;">
+      </div>
+      <div class="config-group">
+        <label>API Key</label>
+        <input id="cfg-key" type="password" value="" placeholder="(optional)" style="width:180px;">
+      </div>
+      <div class="config-group">
+        <label>Tenant ID</label>
+        <input id="cfg-tenant" value="default" style="width:120px;">
+      </div>
+      <div class="config-group" style="align-self: flex-end;">
+        <button class="btn btn-primary btn-sm" onclick="checkHealth()">Test Connection</button>
+      </div>
+    </div>
+
+    <!-- OVERVIEW SECTION -->
+    <div class="section active" id="sec-overview">
+      <div class="main-header">
+        <h1>Overview</h1>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Service Status</div>
+          <div class="stat-value" id="ov-status" style="font-size:1.2rem;">—</div>
+          <div class="stat-sub" id="ov-version"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">DB Health</div>
+          <div class="stat-value" id="ov-db" style="font-size:1.2rem;">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Background Corpus</div>
+          <div class="stat-value" id="ov-corpus">—</div>
+          <div class="stat-sub">texts loaded</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ENROLL SECTION -->
+    <div class="section" id="sec-enroll">
+      <div class="main-header">
+        <h1>Enroll Mailboxes</h1>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Enroll via Graph API</h2>
+          <span class="badge badge-blue">Requires Azure AD config</span>
+        </div>
+        <div style="padding: 20px;">
+          <p style="font-size: 0.85rem; color: var(--text-2); margin-bottom: 16px;">
+            Enter a user's email address. The system will pull their sent-mail history from Microsoft Graph and build a behavioral profile.
+          </p>
+          <div class="enroll-form">
+            <input id="enroll-email" placeholder="user@example.com" onkeydown="if(event.key==='Enter') enrollUser()">
+            <button class="btn btn-primary" id="enroll-btn" onclick="enrollUser()">Enroll</button>
+          </div>
+          <div id="enroll-result" style="margin-top: 16px;"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Enroll via Direct Upload</h2>
+          <span class="badge badge-green">Always available</span>
+        </div>
+        <div style="padding: 20px;">
+          <p style="font-size: 0.85rem; color: var(--text-2); margin-bottom: 16px;">
+            POST emails directly to the /enroll endpoint. Use this if Graph isn't configured or you're ingesting from another source.
+          </p>
+          <pre style="background: var(--surface-2); padding: 16px; border-radius: 8px; font-family: var(--mono); font-size: 0.8rem; color: var(--text-2); overflow-x: auto;">curl -X POST <span class="curl-url">http://localhost:8000</span>/enroll \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_KEY" \
+  -d '{
+    "tenant_id": "default",
+    "user_id": "sha256-prefix-of-email",
+    "user_email": "user@example.com",
+    "emails": [
+      {"recipient_email": "bob@example.com", "body": "Email text...", "sent_at": "2024-01-15T09:00:00Z"}
+    ]
+  }'</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCORING SECTION -->
+    <div class="section" id="sec-scoring">
+      <div class="main-header"><h1>Score an Email</h1></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Real-Time Scoring</h2></div>
+        <div style="padding: 20px;">
+          <p style="font-size: 0.85rem; color: var(--text-2); margin-bottom: 16px;">
+            Test the scoring engine by submitting an email body. The system compares it against the sender's behavioral profile.
+          </p>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="config-group">
+              <label>Sender (mailbox owner)</label>
+              <input id="score-sender" placeholder="sender@example.com" style="width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-family:var(--mono); font-size:0.85rem; padding:10px 14px; border-radius:var(--radius);">
+            </div>
+            <div class="config-group">
+              <label>Recipient</label>
+              <input id="score-recipient" placeholder="recipient@example.com" style="width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-family:var(--mono); font-size:0.85rem; padding:10px 14px; border-radius:var(--radius);">
+            </div>
+          </div>
+          <div class="config-group" style="margin-bottom: 12px;">
+            <label>Email Body</label>
+            <textarea id="score-body" rows="6" placeholder="Paste the email body here..." style="width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-family:var(--font); font-size:0.85rem; padding:10px 14px; border-radius:var(--radius); resize:vertical;"></textarea>
+          </div>
+          <button class="btn btn-primary" onclick="scoreEmail()">Score Email</button>
+          <div id="score-result" style="margin-top: 16px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROFILES SECTION -->
+    <div class="section" id="sec-profiles">
+      <div class="main-header"><h1>Profile Status</h1></div>
+      <div class="panel">
+        <div class="panel-header"><h2>Check Profile</h2></div>
+        <div style="padding: 20px;">
+          <div class="enroll-form">
+            <input id="profile-email" placeholder="user@example.com" onkeydown="if(event.key==='Enter') checkProfile()">
+            <button class="btn btn-primary" onclick="checkProfile()">Check</button>
+          </div>
+          <div id="profile-result" style="margin-top: 16px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LABELS SECTION -->
+    <div class="section" id="sec-labels">
+      <div class="main-header"><h1>Labeling Queue</h1></div>
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Recipient Labels</h2>
+        </div>
+        <div style="padding: 20px;">
+          <p style="font-size: 0.85rem; color: var(--text-2); margin-bottom: 16px;">
+            Enter a user's email and user ID to view their recipient labeling queue.
+          </p>
+          <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+            <input id="label-userid" placeholder="user_id" style="flex:1; background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-family:var(--mono); font-size:0.85rem; padding:10px 14px; border-radius:var(--radius);">
+            <button class="btn btn-primary" onclick="loadLabels()">Load</button>
+          </div>
+          <div id="labels-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VOICE PROFILE SECTION -->
+    <div class="section" id="sec-voice" style="display:none;">
+      <div class="main-header"><h1>Voice Profile</h1></div>
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Writing Style Guide</h2>
+        </div>
+        <div style="padding: 20px;">
+          <p style="font-size: 0.85rem; color: var(--text-2); margin-bottom: 16px;">
+            Generate a natural-language writing style guide from a user's Communication Personality Profile.
+            Copy and paste it into ChatGPT, Gemini, Copilot, or any other LLM as a system instruction
+            to get it to write in this person's voice.
+          </p>
+          <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+            <input id="voice-email" placeholder="user@example.com" style="flex:1; background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-family:var(--mono); font-size:0.85rem; padding:10px 14px; border-radius:var(--radius);">
+            <button class="btn btn-primary" onclick="loadVoiceProfile()">Generate</button>
+          </div>
+
+          <div id="voice-result"></div>
+
+          <!-- Voice profile content (hidden until generated) -->
+          <div id="voice-content" style="display:none;">
+            <!-- Summary bar -->
+            <div style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
+              <div class="stat-card" style="flex:1; min-width:140px;">
+                <div class="stat-label">Formality</div>
+                <div class="stat-value" id="voice-formality" style="font-size:1.4rem;">—</div>
+                <div class="stat-sub">out of 100</div>
+              </div>
+              <div class="stat-card" style="flex:1; min-width:140px;">
+                <div class="stat-label">Emails Analyzed</div>
+                <div class="stat-value" id="voice-emails" style="font-size:1.4rem;">—</div>
+              </div>
+              <div class="stat-card" style="flex:1; min-width:140px;">
+                <div class="stat-label">Sections</div>
+                <div class="stat-value" id="voice-sections-count" style="font-size:1.4rem;">—</div>
+              </div>
+            </div>
+
+            <p id="voice-summary" style="font-size:0.9rem; color:var(--text-2); margin-bottom:20px; line-height:1.6;"></p>
+
+            <!-- Copy button -->
+            <div style="display:flex; gap:8px; margin-bottom:20px;">
+              <button class="btn btn-primary" onclick="copyVoiceProfile()" style="display:flex; align-items:center; gap:6px;">
+                &#128203; Copy Full Profile to Clipboard
+              </button>
+              <button class="btn" onclick="downloadVoiceProfile()" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text); cursor:pointer; display:flex; align-items:center; gap:6px;">
+                &#128190; Download as Markdown
+              </button>
+            </div>
+
+            <!-- Sections -->
+            <div id="voice-sections"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ---- State ----
+function getBaseUrl() { return (document.getElementById('cfg-url').value || window.location.origin).replace(/\/+$/, ''); }
+function getApiKey() { return document.getElementById('cfg-key').value; }
+function getTenant() { return document.getElementById('cfg-tenant').value || 'default'; }
+
+// Auto-detect base URL from current location
+(function() {
+  const url = document.getElementById('cfg-url');
+  if (!url.value) url.value = window.location.origin;
+})();
+
+// ---- API helper ----
+async function api(method, path, body = null) {
+  const headers = { 'Content-Type': 'application/json' };
+  const key = getApiKey();
+  if (key) headers['X-API-Key'] = key;
+
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+
+  const resp = await fetch(getBaseUrl() + path, opts);
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+  return data;
+}
+
+// ---- Toast ----
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast visible ' + type;
+  setTimeout(() => t.className = 'toast', 3500);
+}
+
+// ---- Navigation ----
+document.querySelectorAll('.sidebar-nav a').forEach(a => {
+  a.addEventListener('click', () => {
+    document.querySelectorAll('.sidebar-nav a').forEach(x => x.classList.remove('active'));
+    a.classList.add('active');
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById('sec-' + a.dataset.section).classList.add('active');
+  });
+});
+
+// ---- Health Check ----
+async function checkHealth() {
+  const dot = document.getElementById('health-dot');
+  const text = document.getElementById('health-text');
+  try {
+    const d = await api('GET', '/health');
+    dot.style.background = d.db_healthy ? 'var(--success)' : 'var(--warning)';
+    text.textContent = `${d.service} v${d.version}`;
+    document.getElementById('ov-status').textContent = d.db_healthy ? 'Online' : 'DB Issue';
+    document.getElementById('ov-status').style.color = d.db_healthy ? 'var(--success)' : 'var(--warning)';
+    document.getElementById('ov-version').textContent = `${d.service} v${d.version}`;
+    document.getElementById('ov-db').textContent = d.db_healthy ? 'Healthy' : 'Unhealthy';
+    document.getElementById('ov-db').style.color = d.db_healthy ? 'var(--success)' : 'var(--danger)';
+    document.getElementById('ov-corpus').textContent = d.background_corpus_size.toLocaleString();
+    showToast('Connected to CPA service', 'success');
+  } catch (e) {
+    dot.style.background = 'var(--danger)';
+    text.textContent = 'Offline';
+    document.getElementById('ov-status').textContent = 'Offline';
+    document.getElementById('ov-status').style.color = 'var(--danger)';
+    showToast('Connection failed: ' + e.message, 'error');
+  }
+}
+
+// ---- Enroll ----
+async function enrollUser() {
+  const email = document.getElementById('enroll-email').value.trim();
+  if (!email) return showToast('Enter an email address', 'error');
+
+  const btn = document.getElementById('enroll-btn');
+  const result = document.getElementById('enroll-result');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Enrolling...';
+  result.innerHTML = '<p style="color:var(--text-3);">Fetching sent emails from Graph and building behavioral profile. This may take 1-2 minutes...</p>';
+
+  try {
+    const d = await api('POST', '/enroll-from-graph', {
+      tenant_id: getTenant(),
+      user_email: email,
+    });
+
+    if (d.status === 'success') {
+      result.innerHTML = `
+        <div style="background:var(--success-dim); border:1px solid rgba(16,185,129,0.3); border-radius:var(--radius); padding:16px;">
+          <strong style="color:var(--success);">Enrollment successful</strong>
+          <div style="margin-top:8px; font-size:0.85rem; color:var(--text-2);">
+            <div>Emails fetched: <strong>${d.emails_fetched}</strong></div>
+            <div>Training emails: <strong>${d.training_email_count}</strong></div>
+            <div>Version: <code style="font-family:var(--mono);">${d.cpp_version}</code></div>
+            <div>Hash: <code style="font-family:var(--mono);">${(d.content_hash||'').slice(0,16)}</code></div>
+          </div>
+        </div>`;
+      showToast(`Enrolled ${email}`, 'success');
+    } else {
+      result.innerHTML = `<div style="background:var(--danger-dim); border:1px solid rgba(239,68,68,0.3); border-radius:var(--radius); padding:16px; color:var(--danger);">${d.message}</div>`;
+    }
+  } catch (e) {
+    result.innerHTML = `<div style="background:var(--danger-dim); border:1px solid rgba(239,68,68,0.3); border-radius:var(--radius); padding:16px; color:var(--danger);">Error: ${e.message}</div>`;
+    showToast('Enrollment failed', 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Enroll';
+}
+
+// ---- Score ----
+async function scoreEmail() {
+  const sender = document.getElementById('score-sender').value.trim();
+  const recipient = document.getElementById('score-recipient').value.trim();
+  const body = document.getElementById('score-body').value.trim();
+  if (!sender || !recipient || !body) return showToast('Fill in all fields', 'error');
+
+  const result = document.getElementById('score-result');
+  result.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    const d = await api('POST', '/score', {
+      tenant_id: getTenant(),
+      user_email: sender,
+      recipient_email: recipient,
+      email_body: body,
+    });
+
+    const scoreClass = d.p_authentic >= 0.7 ? 'score-high' : d.p_authentic >= 0.4 ? 'score-med' : 'score-low';
+    const label = d.p_authentic >= 0.7 ? 'Authentic' : d.p_authentic >= 0.4 ? 'Uncertain' : 'Suspicious';
+
+    result.innerHTML = `
+      <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:20px;">
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px;">
+          <span class="score-badge ${scoreClass}" style="font-size:1.5rem; padding:8px 16px;">${d.p_authentic.toFixed(3)}</span>
+          <div>
+            <div style="font-weight:700;">${label}</div>
+            <div style="font-size:0.8rem; color:var(--text-3);">Confidence: ${d.confidence.toFixed(2)}</div>
+          </div>
+        </div>
+        <table>
+          <tr><td style="color:var(--text-3); width:140px;">Bucket used</td><td><code>${d.tw_bucket_used}</code></td></tr>
+          <tr><td style="color:var(--text-3);">Bucket source</td><td><code>${d.tw_source}</code></td></tr>
+          <tr><td style="color:var(--text-3);">CPP version</td><td><code>${d.cpp_version}</code></td></tr>
+          <tr><td style="color:var(--text-3);">Reason</td><td>${d.reason}</td></tr>
+        </table>
+      </div>`;
+  } catch (e) {
+    result.innerHTML = `<div style="color:var(--danger);">Error: ${e.message}</div>`;
+  }
+}
+
+// ---- Profile ----
+async function checkProfile() {
+  const email = document.getElementById('profile-email').value.trim();
+  if (!email) return;
+
+  const result = document.getElementById('profile-result');
+  result.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    const d = await api('GET', `/cpp-status?tenant_id=${encodeURIComponent(getTenant())}&user_email=${encodeURIComponent(email)}`);
+
+    if (!d.exists) {
+      result.innerHTML = '<div style="padding:16px; background:var(--warning-dim); border:1px solid rgba(245,158,11,0.3); border-radius:var(--radius); color:var(--warning);">No profile found for this user. Enroll them first.</div>';
+      return;
+    }
+
+    const coverage = d.tw_coverage || {};
+    result.innerHTML = `
+      <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:20px;">
+        <div style="font-weight:700; margin-bottom:12px; color:var(--success);">Profile Active</div>
+        <table>
+          <tr><td style="color:var(--text-3); width:160px;">Version</td><td><code>${d.cpp_version}</code></td></tr>
+          <tr><td style="color:var(--text-3);">Content hash</td><td><code>${(d.content_hash||'').slice(0,16)}</code></td></tr>
+          <tr><td style="color:var(--text-3);">Training emails</td><td>${d.training_email_count}</td></tr>
+          <tr><td style="color:var(--text-3);">Trained at</td><td>${d.trained_at || '—'}</td></tr>
+          <tr><td style="color:var(--text-3);">TW+ coverage</td><td>${coverage.TW_PLUS || 0} emails</td></tr>
+          <tr><td style="color:var(--text-3);">TW0 coverage</td><td>${coverage.TW_ZERO || 0} emails</td></tr>
+          <tr><td style="color:var(--text-3);">TW- coverage</td><td>${coverage.TW_MINUS || 0} emails</td></tr>
+          <tr><td style="color:var(--text-3);">Last mirrored</td><td>${d.last_mirrored_at || 'Never'}</td></tr>
+        </table>
+      </div>`;
+  } catch (e) {
+    result.innerHTML = `<div style="color:var(--danger);">Error: ${e.message}</div>`;
+  }
+}
+
+// ---- Labels ----
+async function loadLabels() {
+  const userId = document.getElementById('label-userid').value.trim();
+  if (!userId) return showToast('Enter a user ID', 'error');
+
+  const result = document.getElementById('labels-result');
+  result.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    const d = await api('GET', `/labeling-queue?tenant_id=${encodeURIComponent(getTenant())}&user_id=${encodeURIComponent(userId)}&limit=100`);
+
+    if (!d.items || d.items.length === 0) {
+      result.innerHTML = '<div class="empty-state"><p>No labels found for this user.</p></div>';
+      return;
+    }
+
+    let html = '<table><tr><th>Recipient</th><th>Bucket</th><th>Source</th><th>Emails</th><th>Review</th></tr>';
+    for (const item of d.items) {
+      const reviewBadge = item.needs_review
+        ? '<span class="badge badge-yellow">Needs Review</span>'
+        : '<span class="badge badge-green">OK</span>';
+      html += `<tr>
+        <td style="font-family:var(--mono); font-size:0.8rem;">${item.recipient_email}</td>
+        <td><span class="badge badge-blue">${item.current_bucket}</span></td>
+        <td>${item.label_source}</td>
+        <td>${item.email_count}</td>
+        <td>${reviewBadge}</td>
+      </tr>`;
+    }
+    html += '</table>';
+    result.innerHTML = html;
+  } catch (e) {
+    result.innerHTML = `<div style="color:var(--danger);">Error: ${e.message}</div>`;
+  }
+}
+
+// ---- Voice Profile ----
+let _voicePromptText = '';
+let _voiceMarkdown = '';
+
+async function loadVoiceProfile() {
+  const email = document.getElementById('voice-email').value.trim();
+  if (!email) return showToast('Enter a user email', 'error');
+
+  const result = document.getElementById('voice-result');
+  const content = document.getElementById('voice-content');
+  result.innerHTML = '<span class="spinner"></span>';
+  content.style.display = 'none';
+
+  try {
+    const d = await api('GET', `/voice-profile?tenant_id=${encodeURIComponent(getTenant())}&user_email=${encodeURIComponent(email)}`);
+
+    result.innerHTML = '';
+
+    if (!d.exists) {
+      result.innerHTML = '<div style="padding:16px; background:var(--warning-dim); border:1px solid rgba(245,158,11,0.3); border-radius:var(--radius); color:var(--warning);">' +
+        (d.summary || 'No profile found. Enroll this user first.') + '</div>';
+      return;
+    }
+
+    // Store for copy/download
+    _voicePromptText = d.prompt_text || '';
+    _voiceMarkdown = d.markdown || '';
+
+    // Summary stats
+    document.getElementById('voice-formality').textContent = (d.formality_score || 0).toFixed(1);
+    document.getElementById('voice-emails').textContent = d.email_count || 0;
+    document.getElementById('voice-sections-count').textContent = (d.sections || []).length;
+    document.getElementById('voice-summary').textContent = d.summary || '';
+
+    // Render sections
+    const sectionsEl = document.getElementById('voice-sections');
+    sectionsEl.innerHTML = '';
+
+    for (const s of (d.sections || [])) {
+      const div = document.createElement('div');
+      div.style.cssText = 'background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:12px;';
+      div.innerHTML = `
+        <h3 style="font-size:1rem; font-weight:700; margin-bottom:12px; color:var(--accent);">
+          ${s.number}) ${s.title} ${s.emoji}
+        </h3>
+        <div style="font-size:0.85rem; color:var(--text-2); line-height:1.7; white-space:pre-line;">${escapeHtml(s.body)}</div>
+      `;
+      sectionsEl.appendChild(div);
+    }
+
+    content.style.display = 'block';
+    showToast('Voice profile generated!', 'success');
+  } catch (e) {
+    result.innerHTML = `<div style="color:var(--danger);">Error: ${e.message}</div>`;
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function copyVoiceProfile() {
+  if (!_voicePromptText) return showToast('Generate a profile first', 'error');
+  navigator.clipboard.writeText(_voicePromptText).then(() => {
+    showToast('Copied to clipboard! Paste into ChatGPT, Gemini, or any LLM.', 'success');
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = _voicePromptText;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('Copied to clipboard!', 'success');
+  });
+}
+
+function downloadVoiceProfile() {
+  if (!_voiceMarkdown) return showToast('Generate a profile first', 'error');
+  const blob = new Blob([_voiceMarkdown], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'writing-style-guide.md';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Downloaded!', 'success');
+}
+
+// ---- Auto-check health on load ----
+setTimeout(checkHealth, 500);
+</script>
+</body>
+</html>

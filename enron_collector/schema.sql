@@ -25,6 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_emails_owner         ON emails(mailbox_owner);
 CREATE INDEX IF NOT EXISTS idx_emails_owner_folder  ON emails(mailbox_owner, folder);
 CREATE INDEX IF NOT EXISTS idx_emails_date          ON emails(date);
 CREATE INDEX IF NOT EXISTS idx_emails_message_id    ON emails(message_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_emails_message_id_uniq ON emails(message_id) WHERE message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_emails_from_addr     ON emails(from_addr);
 
 -- Convenience view: writers eligible for CPP training.

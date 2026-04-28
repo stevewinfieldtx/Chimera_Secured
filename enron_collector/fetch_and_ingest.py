@@ -167,6 +167,8 @@ INSERT INTO emails (
     %(subject)s, %(body_text)s, %(body_raw)s,
     %(in_reply_to)s, %(references_ids)s, %(char_count)s, %(word_count)s
 )
+ON CONFLICT (message_id) WHERE message_id IS NOT NULL
+DO NOTHING
 """
 
 
