@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>HowDoISay — Speak It Now</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --pri: #4F46E5; --pri-light: #EEF2FF;
+      --bg: #F8FAFC; --card: #fff;
+      --text: #1E293B; --muted: #64748B;
+      --green: #16a34a; --blue: #2563eb; --red: #dc2626;
+      --orange: #ea580c; --purple: #7c3aed;
+      --radius: 12px;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; display: flex; flex-direction: column; }
+
+    /* ── Header ─────────────────────────── */
+    header { background: var(--card); padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,.08); position: sticky; top: 0; z-index: 10; }
+    .logo { font-weight: 800; font-size: 1.15rem; color: var(--pri); }
+    .gear-btn { background: none; border: none; font-size: 1.3rem; cursor: pointer; padding: 4px 8px; }
+
+    /* ── Tabs (scrollable for many languages) ── */
+    .tabs { display: flex; gap: 0; background: var(--card); border-bottom: 1px solid #e2e8f0; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab { flex: 0 0 auto; padding: 10px 14px; text-align: center; font-weight: 600; font-size: .85rem; cursor: pointer; border-bottom: 3px solid transparent; color: var(--muted); transition: .15s; white-space: nowrap; }
+    .tab.active { color: var(--pri); border-bottom-color: var(--pri); }
+
+    /* ── Main Area ──────────────────────── */
+    main { flex: 1; padding: 16px; max-width: 600px; width: 100%; margin: 0 auto; }
+
+    /* ── Search ──────────────────────────── */
+    .search-wrap { position: relative; margin-bottom: 12px; }
+    .search-input { width: 100%; padding: 14px 16px 14px 44px; font-size: 1.1rem; border: 2px solid #e2e8f0; border-radius: var(--radius); background: var(--card); outline: none; transition: border-color .15s; }
+    .search-input:focus { border-color: var(--pri); }
+    .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 1.2rem; color: var(--muted); pointer-events: none; }
+    .clear-btn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--muted); display: none; }
+
+    /* ── Chips ───────────────────────────── */
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+    .chip { background: var(--pri-light); color: var(--pri); padding: 6px 12px; border-radius: 20px; font-size: .82rem; cursor: pointer; border: none; font-weight: 500; white-space: nowrap; }
+    .chip:hover { background: #ddd6fe; }
+
+    /* ── Result Card ─────────────────────── */
+    .result-card { background: var(--card); border-radius: var(--radius); padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.06); display: none; }
+    .result-card.show { display: block; }
+
+    .res-badge { display: inline-block; font-size: .7rem; font-weight: 700; padding: 2px 8px; border-radius: 8px; margin-bottom: 8px; text-transform: uppercase; }
+    .badge-local { background: #dcfce7; color: #166534; }
+    .badge-api { background: #dbeafe; color: #1e40af; }
+    .badge-fuzzy { background: #fef9c3; color: #854d0e; }
+
+    .res-target { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
+    .res-pinyin { font-weight: 400; font-size: 1.1rem; color: var(--muted); }
+    .res-quick { font-size: 1.15rem; margin: 10px 0 16px; color: var(--pri); }
+    .res-quick strong { font-size: 1.25rem; }
+
+    /* ── Staircase ───────────────────────── */
+    .staircase-row { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
+    .syl-block { text-align: center; min-width: 60px; padding: 8px; }
+    .staircase { display: inline-flex; font-size: 1.8rem; font-weight: 800; font-family: "Courier New", monospace; letter-spacing: 2px; height: 3rem; align-items: flex-start; }
+    .stair-ch { display: inline-block; transition: transform .2s; }
+    .syl-tone { font-size: .72rem; font-weight: 600; margin-top: 4px; }
+    .syl-target { font-size: .8rem; color: var(--muted); margin-top: 2px; }
+    .syl-hint { font-size: .75rem; color: var(--muted); font-style: italic; }
+
+    /* ── Suggestions dropdown ────────────── */
+    .suggestions { background: var(--card); border: 1px solid #e2e8f0; border-radius: var(--radius); max-height: 200px; overflow-y: auto; display: none; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+    .suggestions.show { display: block; }
+    .sug-item { padding: 10px 16px; cursor: pointer; font-size: .95rem; border-bottom: 1px solid #f1f5f9; }
+    .sug-item:hover, .sug-item.active { background: var(--pri-light); }
+    .sug-item:last-child { border-bottom: none; }
+
+    /* ── Settings Modal ──────────────────── */
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 100; display: none; align-items: center; justify-content: center; }
+    .modal-bg.show { display: flex; }
+    .modal { background: var(--card); padding: 24px; border-radius: var(--radius); width: 90%; max-width: 400px; }
+    .modal h3 { margin-bottom: 16px; }
+    .modal label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: 4px; color: var(--muted); }
+    .modal input { width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: .95rem; margin-bottom: 12px; }
+    .modal .btn-row { display: flex; gap: 8px; justify-content: flex-end; }
+    .modal button { padding: 8px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; }
+    .btn-save { background: var(--pri); color: #fff; }
+    .btn-cancel { background: #f1f5f9; color: var(--text); }
+
+    /* ── Loading / Error ─────────────────── */
+    .loading { text-align: center; padding: 20px; color: var(--muted); display: none; }
+    .loading.show { display: block; }
+    .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid #e2e8f0; border-top-color: var(--pri); border-radius: 50%; animation: spin .6s linear infinite; margin-right: 8px; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-msg { color: var(--red); font-size: .9rem; margin-top: 8px; display: none; }
+    .error-msg.show { display: block; }
+
+    /* ── Phrase count ─────────────────────── */
+    .phrase-count { text-align: center; font-size: .75rem; color: var(--muted); margin-top: 16px; }
+
+    /* ── Direction Bar ────────────────────── */
+    .direction-bar { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 10px 16px; background: var(--pri-light); }
+    .dir-label { font-size: .9rem; font-weight: 600; color: var(--pri); }
+    .dir-swap { background: var(--card); border: 1px solid var(--pri); color: var(--pri); padding: 4px 14px; border-radius: 20px; font-size: .82rem; font-weight: 600; cursor: pointer; }
+    .dir-swap:hover { background: var(--pri); color: #fff; }
+
+    /* ── Reverse result ──────────────────── */
+    .rev-english { font-size: 1.5rem; font-weight: 700; margin-bottom: 12px; color: var(--text); }
+    .rev-row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+    .rev-block { text-align: center; padding: 8px 12px; background: var(--pri-light); border-radius: 8px; min-width: 70px; }
+    .rev-word { font-size: 1rem; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+    .rev-mnemonic { font-size: 1.3rem; font-weight: 800; color: var(--pri); }
+    .rev-hint { font-size: .75rem; color: var(--muted); font-style: italic; margin-top: 2px; }
+
+    /* ── QR Footer ────────────────────────── */
+    .qr-footer { text-align: center; padding: 24px 16px 32px; border-top: 1px solid #e2e8f0; margin-top: 24px; }
+    .qr-footer svg { width: 120px; height: 120px; }
+    .qr-footer p { font-size: .8rem; color: var(--muted); margin-top: 8px; }
+    .qr-footer a { color: var(--pri); text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">HowDoISay</div>
+  </header>
+
+  <div class="tabs" id="tabBar">
+    <!-- Tabs built dynamically from Engine.LANGS -->
+  </div>
+
+  <div class="direction-bar" id="directionBar">
+    <span class="dir-label" id="dirLabel">English → Vietnamese</span>
+    <button class="dir-swap" onclick="swapDirection()">⇄ Swap</button>
+  </div>
+
+  <main>
+    <div class="loading" id="loading">
+      <span class="spinner"></span> Translating with AI...
+    </div>
+
+    <div class="result-card" id="resultCard"></div>
+
+    <div class="error-msg" id="errorMsg"></div>
+
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="searchInput" type="text" placeholder="Type English phrase..." autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button class="clear-btn" id="clearBtn" onclick="clearInput()">✕</button>
+    </div>
+
+    <div class="suggestions" id="suggestions"></div>
+
+    <div class="chips" id="chips"></div>
+
+    <div class="phrase-count" id="phraseCount"></div>
+
+    <div class="qr-footer">
+      <svg width="26.4mm" height="26.4mm" version="1.1" viewBox="0 0 26.4 26.4" xmlns="http://www.w3.org/2000/svg"><path d="M3.2,3.2H4V4H3.2zM4,3.2H4.8V4H4zM4.8,3.2H5.6V4H4.8zM5.6,3.2H6.4V4H5.6zM6.4,3.2H7.2V4H6.4zM7.2,3.2H8V4H7.2zM8,3.2H8.8V4H8zM9.6,3.2H10.4V4H9.6zM10.4,3.2H11.2V4H10.4zM11.2,3.2H12V4H11.2zM12,3.2H12.8V4H12zM13.6,3.2H14.4V4H13.6zM14.4,3.2H15.2V4H14.4zM15.2,3.2H16V4H15.2zM16,3.2H16.8V4H16zM17.6,3.2H18.4V4H17.6zM18.4,3.2H19.2V4H18.4zM19.2,3.2H20V4H19.2zM20,3.2H20.8V4H20zM20.8,3.2H21.6V4H20.8zM21.6,3.2H22.4V4H21.6zM22.4,3.2H23.2V4H22.4zM3.2,4H4V4.8H3.2zM8,4H8.8V4.8H8zM10.4,4H11.2V4.8H10.4zM12,4H12.8V4.8H12zM13.6,4H14.4V4.8H13.6zM14.4,4H15.2V4.8H14.4zM17.6,4H18.4V4.8H17.6zM22.4,4H23.2V4.8H22.4zM3.2,4.8H4V5.6H3.2zM4.8,4.8H5.6V5.6H4.8zM5.6,4.8H6.4V5.6H5.6zM6.4,4.8H7.2V5.6H6.4zM8,4.8H8.8V5.6H8zM11.2,4.8H12V5.6H11.2zM12,4.8H12.8V5.6H12zM14.4,4.8H15.2V5.6H14.4zM17.6,4.8H18.4V5.6H17.6zM19.2,4.8H20V5.6H19.2zM20,4.8H20.8V5.6H20zM20.8,4.8H21.6V5.6H20.8zM22.4,4.8H23.2V5.6H22.4zM3.2,5.6H4V6.4H3.2zM4.8,5.6H5.6V6.4H4.8zM5.6,5.6H6.4V6.4H5.6zM6.4,5.6H7.2V6.4H6.4zM8,5.6H8.8V6.4H8zM9.6,5.6H10.4V6.4H9.6zM10.4,5.6H11.2V6.4H10.4zM13.6,5.6H14.4V6.4H13.6zM14.4,5.6H15.2V6.4H14.4zM16,5.6H16.8V6.4H16zM17.6,5.6H18.4V6.4H17.6zM19.2,5.6H20V6.4H19.2zM20,5.6H20.8V6.4H20zM20.8,5.6H21.6V6.4H20.8zM22.4,5.6H23.2V6.4H22.4zM3.2,6.4H4V7.2H3.2zM4.8,6.4H5.6V7.2H4.8zM5.6,6.4H6.4V7.2H5.6zM6.4,6.4H7.2V7.2H6.4zM8,6.4H8.8V7.2H8zM9.6,6.4H10.4V7.2H9.6zM10.4,6.4H11.2V7.2H10.4zM12,6.4H12.8V7.2H12zM13.6,6.4H14.4V7.2H13.6zM15.2,6.4H16V7.2H15.2zM17.6,6.4H18.4V7.2H17.6zM19.2,6.4H20V7.2H19.2zM20,6.4H20.8V7.2H20zM20.8,6.4H21.6V7.2H20.8zM22.4,6.4H23.2V7.2H22.4zM3.2,7.2H4V8H3.2zM8,7.2H8.8V8H8zM9.6,7.2H10.4V8H9.6zM10.4,7.2H11.2V8H10.4zM12,7.2H12.8V8H12zM12.8,7.2H13.6V8H12.8zM13.6,7.2H14.4V8H13.6zM14.4,7.2H15.2V8H14.4zM16,7.2H16.8V8H16zM17.6,7.2H18.4V8H17.6zM22.4,7.2H23.2V8H22.4zM3.2,8H4V8.8H3.2zM4,8H4.8V8.8H4zM4.8,8H5.6V8.8H4.8zM5.6,8H6.4V8.8H5.6zM6.4,8H7.2V8.8H6.4zM7.2,8H8V8.8H7.2zM8,8H8.8V8.8H8zM9.6,8H10.4V8.8H9.6zM11.2,8H12V8.8H11.2zM12.8,8H13.6V8.8H12.8zM14.4,8H15.2V8.8H14.4zM16,8H16.8V8.8H16zM17.6,8H18.4V8.8H17.6zM18.4,8H19.2V8.8H18.4zM19.2,8H20V8.8H19.2zM20,8H20.8V8.8H20zM20.8,8H21.6V8.8H20.8zM21.6,8H22.4V8.8H21.6zM22.4,8H23.2V8.8H22.4zM9.6,8.8H10.4V9.6H9.6zM10.4,8.8H11.2V9.6H10.4zM15.2,8.8H16V9.6H15.2zM16,8.8H16.8V9.6H16zM3.2,9.6H4V10.4H3.2zM6.4,9.6H7.2V10.4H6.4zM8,9.6H8.8V10.4H8zM8.8,9.6H9.6V10.4H8.8zM9.6,9.6H10.4V10.4H9.6zM10.4,9.6H11.2V10.4H10.4zM12,9.6H12.8V10.4H12zM12.8,9.6H13.6V10.4H12.8zM15.2,9.6H16V10.4H15.2zM16,9.6H16.8V10.4H16zM16.8,9.6H17.6V10.4H16.8zM17.6,9.6H18.4V10.4H17.6zM18.4,9.6H19.2V10.4H18.4zM19.2,9.6H20V10.4H19.2zM20,9.6H20.8V10.4H20zM22.4,9.6H23.2V10.4H22.4zM5.6,10.4H6.4V11.2H5.6zM8.8,10.4H9.6V11.2H8.8zM9.6,10.4H10.4V11.2H9.6zM10.4,10.4H11.2V11.2H10.4zM12.8,10.4H13.6V11.2H12.8zM13.6,10.4H14.4V11.2H13.6zM15.2,10.4H16V11.2H15.2zM16,10.4H16.8V11.2H16zM16.8,10.4H17.6V11.2H16.8zM19.2,10.4H20V11.2H19.2zM20,10.4H20.8V11.2H20zM21.6,10.4H22.4V11.2H21.6zM4,11.2H4.8V12H4zM4.8,11.2H5.6V12H4.8zM6.4,11.2H7.2V12H6.4zM7.2,11.2H8V12H7.2zM8,11.2H8.8V12H8zM10.4,11.2H11.2V12H10.4zM12,11.2H12.8V12H12zM12.8,11.2H13.6V12H12.8zM15.2,11.2H16V12H15.2zM18.4,11.2H19.2V12H18.4zM19.2,11.2H20V12H19.2zM20,11.2H20.8V12H20zM20.8,11.2H21.6V12H20.8zM3.2,12H4V12.8H3.2zM4,12H4.8V12.8H4zM5.6,12H6.4V12.8H5.6zM6.4,12H7.2V12.8H6.4zM10.4,12H11.2V12.8H10.4zM11.2,12H12V12.8H11.2zM15.2,12H16V12.8H15.2zM16,12H16.8V12.8H16zM17.6,12H18.4V12.8H17.6zM18.4,12H19.2V12.8H18.4zM19.2,12H20V12.8H19.2zM20.8,12H21.6V12.8H20.8zM21.6,12H22.4V12.8H21.6zM4.8,12.8H5.6V13.6H4.8zM5.6,12.8H6.4V13.6H5.6zM6.4,12.8H7.2V13.6H6.4zM8,12.8H8.8V13.6H8zM9.6,12.8H10.4V13.6H9.6zM10.4,12.8H11.2V13.6H10.4zM11.2,12.8H12V13.6H11.2zM12,12.8H12.8V13.6H12zM13.6,12.8H14.4V13.6H13.6zM14.4,12.8H15.2V13.6H14.4zM16.8,12.8H17.6V13.6H16.8zM17.6,12.8H18.4V13.6H17.6zM18.4,12.8H19.2V13.6H18.4zM20,12.8H20.8V13.6H20zM20.8,12.8H21.6V13.6H20.8zM21.6,12.8H22.4V13.6H21.6zM22.4,12.8H23.2V13.6H22.4zM3.2,13.6H4V14.4H3.2zM4,13.6H4.8V14.4H4zM7.2,13.6H8V14.4H7.2zM10.4,13.6H11.2V14.4H10.4zM11.2,13.6H12V14.4H11.2zM12.8,13.6H13.6V14.4H12.8zM14.4,13.6H15.2V14.4H14.4zM15.2,13.6H16V14.4H15.2zM16,13.6H16.8V14.4H16zM17.6,13.6H18.4V14.4H17.6zM19.2,13.6H20V14.4H19.2zM21.6,13.6H22.4V14.4H21.6zM4.8,14.4H5.6V15.2H4.8zM5.6,14.4H6.4V15.2H5.6zM6.4,14.4H7.2V15.2H6.4zM8,14.4H8.8V15.2H8zM10.4,14.4H11.2V15.2H10.4zM11.2,14.4H12V15.2H11.2zM12,14.4H12.8V15.2H12zM12.8,14.4H13.6V15.2H12.8zM13.6,14.4H14.4V15.2H13.6zM14.4,14.4H15.2V15.2H14.4zM15.2,14.4H16V15.2H15.2zM20,14.4H20.8V15.2H20zM20.8,14.4H21.6V15.2H20.8zM4.8,15.2H5.6V16H4.8zM5.6,15.2H6.4V16H5.6zM7.2,15.2H8V16H7.2zM8.8,15.2H9.6V16H8.8zM11.2,15.2H12V16H11.2zM12,15.2H12.8V16H12zM13.6,15.2H14.4V16H13.6zM16,15.2H16.8V16H16zM16.8,15.2H17.6V16H16.8zM19.2,15.2H20V16H19.2zM20,15.2H20.8V16H20zM20.8,15.2H21.6V16H20.8zM21.6,15.2H22.4V16H21.6zM3.2,16H4V16.8H3.2zM4,16H4.8V16.8H4zM5.6,16H6.4V16.8H5.6zM8,16H8.8V16.8H8zM9.6,16H10.4V16.8H9.6zM10.4,16H11.2V16.8H10.4zM12.8,16H13.6V16.8H12.8zM13.6,16H14.4V16.8H13.6zM16,16H16.8V16.8H16zM16.8,16H17.6V16.8H16.8zM17.6,16H18.4V16.8H17.6zM18.4,16H19.2V16.8H18.4zM19.2,16H20V16.8H19.2zM20,16H20.8V16.8H20zM20.8,16H21.6V16.8H20.8zM9.6,16.8H10.4V17.6H9.6zM10.4,16.8H11.2V17.6H10.4zM11.2,16.8H12V17.6H11.2zM13.6,16.8H14.4V17.6H13.6zM14.4,16.8H15.2V17.6H14.4zM15.2,16.8H16V17.6H15.2zM16,16.8H16.8V17.6H16zM19.2,16.8H20V17.6H19.2zM20.8,16.8H21.6V17.6H20.8zM3.2,17.6H4V18.4H3.2zM4,17.6H4.8V18.4H4zM4.8,17.6H5.6V18.4H4.8zM5.6,17.6H6.4V18.4H5.6zM6.4,17.6H7.2V18.4H6.4zM7.2,17.6H8V18.4H7.2zM8,17.6H8.8V18.4H8zM9.6,17.6H10.4V18.4H9.6zM10.4,17.6H11.2V18.4H10.4zM15.2,17.6H16V18.4H15.2zM16,17.6H16.8V18.4H16zM17.6,17.6H18.4V18.4H17.6zM19.2,17.6H20V18.4H19.2zM20,17.6H20.8V18.4H20zM3.2,18.4H4V19.2H3.2zM8,18.4H8.8V19.2H8zM12.8,18.4H13.6V19.2H12.8zM14.4,18.4H15.2V19.2H14.4zM16,18.4H16.8V19.2H16zM19.2,18.4H20V19.2H19.2zM20,18.4H20.8V19.2H20zM20.8,18.4H21.6V19.2H20.8zM21.6,18.4H22.4V19.2H21.6zM3.2,19.2H4V20H3.2zM4.8,19.2H5.6V20H4.8zM5.6,19.2H6.4V20H5.6zM6.4,19.2H7.2V20H6.4zM8,19.2H8.8V20H8zM9.6,19.2H10.4V20H9.6zM11.2,19.2H12V20H11.2zM12,19.2H12.8V20H12zM13.6,19.2H14.4V20H13.6zM14.4,19.2H15.2V20H14.4zM16,19.2H16.8V20H16zM16.8,19.2H17.6V20H16.8zM17.6,19.2H18.4V20H17.6zM18.4,19.2H19.2V20H18.4zM19.2,19.2H20V20H19.2zM20.8,19.2H21.6V20H20.8zM21.6,19.2H22.4V20H21.6zM22.4,19.2H23.2V20H22.4zM3.2,20H4V20.8H3.2zM4.8,20H5.6V20.8H4.8zM5.6,20H6.4V20.8H5.6zM6.4,20H7.2V20.8H6.4zM8,20H8.8V20.8H8zM10.4,20H11.2V20.8H10.4zM12.8,20H13.6V20.8H12.8zM15.2,20H16V20.8H15.2zM16.8,20H17.6V20.8H16.8zM17.6,20H18.4V20.8H17.6zM18.4,20H19.2V20.8H18.4zM19.2,20H20V20.8H19.2zM20,20H20.8V20.8H20zM20.8,20H21.6V20.8H20.8zM21.6,20H22.4V20.8H21.6zM22.4,20H23.2V20.8H22.4zM3.2,20.8H4V21.6H3.2zM4.8,20.8H5.6V21.6H4.8zM5.6,20.8H6.4V21.6H5.6zM6.4,20.8H7.2V21.6H6.4zM8,20.8H8.8V21.6H8zM11.2,20.8H12V21.6H11.2zM12,20.8H12.8V21.6H12zM12.8,20.8H13.6V21.6H12.8zM13.6,20.8H14.4V21.6H13.6zM14.4,20.8H15.2V21.6H14.4zM15.2,20.8H16V21.6H15.2zM16.8,20.8H17.6V21.6H16.8zM17.6,20.8H18.4V21.6H17.6zM18.4,20.8H19.2V21.6H18.4zM21.6,20.8H22.4V21.6H21.6zM3.2,21.6H4V22.4H3.2zM8,21.6H8.8V22.4H8zM10.4,21.6H11.2V22.4H10.4zM11.2,21.6H12V22.4H11.2zM12,21.6H12.8V22.4H12zM13.6,21.6H14.4V22.4H13.6zM15.2,21.6H16V22.4H15.2zM16,21.6H16.8V22.4H16zM17.6,21.6H18.4V22.4H17.6zM18.4,21.6H19.2V22.4H18.4zM19.2,21.6H20V22.4H19.2zM20,21.6H20.8V22.4H20zM20.8,21.6H21.6V22.4H20.8zM21.6,21.6H22.4V22.4H21.6zM3.2,22.4H4V23.2H3.2zM4,22.4H4.8V23.2H4zM4.8,22.4H5.6V23.2H4.8zM5.6,22.4H6.4V23.2H5.6zM6.4,22.4H7.2V23.2H6.4zM7.2,22.4H8V23.2H7.2zM8,22.4H8.8V23.2H8zM9.6,22.4H10.4V23.2H9.6zM11.2,22.4H12V23.2H11.2zM12.8,22.4H13.6V23.2H12.8zM13.6,22.4H14.4V23.2H13.6zM15.2,22.4H16V23.2H15.2zM16.8,22.4H17.6V23.2H16.8zM20.8,22.4H21.6V23.2H20.8zM21.6,22.4H22.4V23.2H21.6zM22.4,22.4H23.2V23.2H22.4z" id="qr-path" fill="#000000" fill-opacity="1" fill-rule="nonzero" stroke="none"/></svg>
+      <p>Share this app: <a href="http://HowDoISay.app">HowDoISay.app</a></p>
+    </div>
+  </main>
+
+  <!-- Settings Modal -->
+  <div class="modal-bg" id="settingsModal">
+    <div class="modal">
+      <h3>⚙️ Settings</h3>
+      <label>OpenRouter API Key</label>
+      <input type="password" id="apiKeyInput" placeholder="sk-or-...">
+      <label>OpenRouter Model ID</label>
+      <input type="text" id="modelIdInput" placeholder="google/gemini-2.0-flash-001">
+      <p style="font-size:.78rem; color:var(--muted); margin-bottom:12px;">
+        Optional. Without an API key, only the built-in 200+ phrases work.<br>
+        With a key, any English phrase gets translated on the fly.
+      </p>
+      <div class="btn-row">
+        <button class="btn-cancel" onclick="toggleSettings()">Cancel</button>
+        <button class="btn-save" onclick="saveSettings()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts: Engine first, then all dictionaries -->
+  <script src="engine.js"></script>
+  <script src="dict-vi.js"></script>
+  <script src="dict-zh.js"></script>
+  <script src="dict-ja.js"></script>
+  <script src="dict-th.js"></script>
+  <script src="dict-tl.js"></script>
+  <script src="dict-ru.js"></script>
+  <script src="dict-uk.js"></script>
+  <script src="dict-it.js"></script>
+  <script src="dict-de.js"></script>
+  <script src="dict-fr.js"></script>
+  <script src="dict-pt-br.js"></script>
+  <script>
+    // ── State ──────────────────────────────
+    let currentLang = 'vi';
+    let currentDir = 'forward'; // 'forward' = EN→target, 'reverse' = target→EN
+    let openrouter_api_key = '';
+    let openrouter_model_id = '';
+    let debounceTimer = null;
+
+    // Load saved settings
+    try {
+      openrouter_api_key = localStorage.getItem('openrouter_api_key') || '';
+      openrouter_model_id = localStorage.getItem('openrouter_model_id') || '';
+    } catch(e) {}
+
+    // ── Build Tabs from Engine.LANGS ──────
+    function buildTabs() {
+      const bar = document.getElementById('tabBar');
+      // Language display order
+      const order = ['vi','zh','ja','th','tl','ru','uk','it','de','fr','pt-br'];
+      bar.innerHTML = order.map(code => {
+        const cfg = Engine.LANGS[code];
+        return `<div class="tab${code === currentLang ? ' active' : ''}" data-lang="${code}" onclick="switchLang('${code}')">${cfg.flag} ${cfg.name.split(' ')[0]}</div>`;
+      }).join('');
+    }
+
+    // ── Init ──────────────────────────────
+    function init() {
+      buildTabs();
+      updateDirectionUI();
+      showChips();
+      showPhraseCount();
+      document.getElementById('searchInput').addEventListener('input', onInput);
+      document.getElementById('searchInput').addEventListener('keydown', onKeydown);
+    }
+
+    // ── Language Switching ─────────────────
+    function switchLang(lang) {
+      currentLang = lang;
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.lang === lang));
+      clearInput();
+      updateDirectionUI();
+      showChips();
+      showPhraseCount();
+      // Scroll active tab into view
+      const activeTab = document.querySelector('.tab.active');
+      if (activeTab) activeTab.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+
+    // ── Direction ─────────────────────────
+    function swapDirection() {
+      currentDir = currentDir === 'forward' ? 'reverse' : 'forward';
+      clearInput();
+      updateDirectionUI();
+      showChips();
+      showPhraseCount();
+    }
+
+    function updateDirectionUI() {
+      const langName = Engine.langName(currentLang);
+      const nui = (Engine.LANGS[currentLang] && Engine.LANGS[currentLang].nativeUI) || {};
+
+      const label = currentDir === 'forward'
+        ? `English → ${langName}`
+        : (nui.toEn || `${langName} → English`);
+      document.getElementById('dirLabel').textContent = label;
+
+      const placeholder = currentDir === 'forward'
+        ? 'Type English phrase...'
+        : (nui.typed || `Type ${langName} text...`);
+      document.getElementById('searchInput').placeholder = placeholder;
+
+      // Update loading text for the current mode
+      const loadingEl = document.getElementById('loading');
+      const loadingText = currentDir === 'forward'
+        ? 'Translating with AI...'
+        : (nui.loading || 'Translating with AI...');
+      loadingEl.innerHTML = `<span class="spinner"></span> ${loadingText}`;
+    }
+
+    // ── Chips ─────────────────────────────
+    function showChips() {
+      const el = document.getElementById('chips');
+      if (currentDir === 'forward') {
+        const common = [
+          'hello','thank you','goodbye','how much','where is the bathroom',
+          'beer','water','delicious','help','i don\'t understand',
+          'yes','no','excuse me','check please','too expensive'
+        ];
+        el.innerHTML = common.map(c => `<button class="chip" onclick="selectPhrase('${c}')">${c}</button>`).join('');
+      } else {
+        // Reverse: show sample phrases in the target language
+        const samples = Engine.reverseSamples[currentLang] || [];
+        el.innerHTML = samples.map(c => `<button class="chip" onclick="selectPhrase('${c.replace(/'/g, "\\'")}')">${c}</button>`).join('');
+      }
+    }
+
+    function showPhraseCount() {
+      const langName = Engine.langName(currentLang);
+      const nui = (Engine.LANGS[currentLang] && Engine.LANGS[currentLang].nativeUI) || {};
+      if (currentDir === 'forward') {
+        const count = Engine.allKeys(currentLang).length;
+        document.getElementById('phraseCount').textContent = `${count} phrases loaded offline • ${langName}`;
+      } else {
+        const toEnLabel = nui.toEn || `${langName} → English`;
+        const poweredBy = nui.poweredBy || 'Powered by AI';
+        document.getElementById('phraseCount').textContent = `${toEnLabel} • ${poweredBy}`;
+      }
+    }
+
+    // ── Input Handling ────────────────────
+    function onInput() {
+      const val = document.getElementById('searchInput').value;
+      document.getElementById('clearBtn').style.display = val ? 'block' : 'none';
+      document.getElementById('errorMsg').className = 'error-msg';
+
+      clearTimeout(debounceTimer);
+      if (!val.trim()) {
+        hideSuggestions();
+        document.getElementById('resultCard').className = 'result-card';
+        return;
+      }
+      debounceTimer = setTimeout(() => processInput(val), 50);
+    }
+
+    function onKeydown(e) {
+      const sugs = document.getElementById('suggestions');
+      const items = sugs.querySelectorAll('.sug-item');
+      const active = sugs.querySelector('.sug-item.active');
+      let idx = -1;
+      items.forEach((it, i) => { if (it.classList.contains('active')) idx = i; });
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (idx < items.length - 1) { items.forEach(i => i.classList.remove('active')); items[idx+1].classList.add('active'); }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (idx > 0) { items.forEach(i => i.classList.remove('active')); items[idx-1].classList.add('active'); }
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (active) { selectPhrase(active.dataset.phrase); }
+        else { processInput(document.getElementById('searchInput').value); hideSuggestions(); }
+      }
+    }
+
+    // ── Suggestions ───────────────────────
+    function showSuggestions(phrase) {
+      if (currentDir === 'reverse') { hideSuggestions(); return; }
+      const keys = Engine.allKeys(currentLang);
+      const q = phrase.toLowerCase().trim();
+      const matches = keys.filter(k => k.includes(q) || q.split(' ').some(w => k.includes(w))).slice(0, 8);
+
+      const el = document.getElementById('suggestions');
+      if (matches.length === 0) { hideSuggestions(); return; }
+      el.innerHTML = matches.map(m => `<div class="sug-item" data-phrase="${m}" onclick="selectPhrase('${m.replace(/'/g, "\\'")}')">${m}</div>`).join('');
+      el.className = 'suggestions show';
+    }
+
+    function hideSuggestions() {
+      document.getElementById('suggestions').className = 'suggestions';
+    }
+
+    // ── Process ───────────────────────────
+    async function processInput(phrase) {
+      if (!phrase.trim()) return;
+
+      const card = document.getElementById('resultCard');
+      const loading = document.getElementById('loading');
+      const errorEl = document.getElementById('errorMsg');
+
+      if (currentDir === 'reverse') {
+        // Reverse: target language → English (always API)
+        hideSuggestions();
+        loading.className = 'loading show';
+        card.className = 'result-card';
+        try {
+          const result = await Engine.apiReverseTranslate(phrase, currentLang, openrouter_api_key, openrouter_model_id);
+          card.innerHTML = badge('api') + Engine.renderReverseResult(result, currentLang);
+          card.className = 'result-card show';
+        } catch(err) {
+          errorEl.textContent = err.message;
+          errorEl.className = 'error-msg show';
+        }
+        loading.className = 'loading';
+        return;
+      }
+
+      // Forward: English → target language
+      showSuggestions(phrase);
+
+      // Try exact local match only
+      const local = Engine.lookup(phrase, currentLang);
+      if (local) {
+        card.innerHTML = badge('local') + Engine.renderResult(local, currentLang);
+        card.className = 'result-card show';
+        loading.className = 'loading';
+        return;
+      }
+
+      // API fallback
+      loading.className = 'loading show';
+      card.className = 'result-card';
+      try {
+        const result = await Engine.apiTranslate(phrase, currentLang, openrouter_api_key, openrouter_model_id);
+        card.innerHTML = badge('api') + Engine.renderResult(result, currentLang);
+        card.className = 'result-card show';
+      } catch(err) {
+        errorEl.textContent = err.message;
+        errorEl.className = 'error-msg show';
+      }
+      loading.className = 'loading';
+    }
+
+    function badge(type, matchedKey) {
+      if (type === 'local') return '<span class="res-badge badge-local">⚡ Offline</span>';
+      if (type === 'api') return '<span class="res-badge badge-api">🌐 AI Translated</span>';
+      if (type === 'fuzzy') return `<span class="res-badge badge-fuzzy">≈ Matched: "${matchedKey}"</span>`;
+      return '';
+    }
+
+    // ── Select Phrase ─────────────────────
+    function selectPhrase(phrase) {
+      document.getElementById('searchInput').value = phrase;
+      document.getElementById('clearBtn').style.display = 'block';
+      hideSuggestions();
+      processInput(phrase);
+    }
+
+    // ── Clear ─────────────────────────────
+    function clearInput() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('clearBtn').style.display = 'none';
+      document.getElementById('resultCard').className = 'result-card';
+      document.getElementById('errorMsg').className = 'error-msg';
+      document.getElementById('loading').className = 'loading';
+      hideSuggestions();
+      document.getElementById('searchInput').focus();
+    }
+
+    // ── Settings ──────────────────────────
+    function toggleSettings() {
+      const m = document.getElementById('settingsModal');
+      const show = !m.classList.contains('show');
+      m.className = show ? 'modal-bg show' : 'modal-bg';
+      if (show) {
+        document.getElementById('apiKeyInput').value = openrouter_api_key;
+        document.getElementById('modelIdInput').value = openrouter_model_id;
+      }
+    }
+
+    function saveSettings() {
+      openrouter_api_key = document.getElementById('apiKeyInput').value.trim();
+      openrouter_model_id = document.getElementById('modelIdInput').value.trim();
+      try {
+        localStorage.setItem('openrouter_api_key', openrouter_api_key);
+        localStorage.setItem('openrouter_model_id', openrouter_model_id);
+      } catch(e) {}
+      toggleSettings();
+    }
+
+    // ── Boot ──────────────────────────────
+    init();
+  </script>
+</body>
+</html>
