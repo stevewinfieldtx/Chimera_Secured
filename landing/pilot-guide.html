@@ -321,6 +321,7 @@ footer {
     <a href="#api" class="toc-h3">API Reference</a>
     <a href="#data-flow" class="toc-h3">Data Flow Summary</a>
     <a href="#troubleshooting" class="toc-h3">Troubleshooting</a>
+    <a href="#support" class="toc-h3">Pilot Support</a>
     <a href="#templates" class="toc-h1">Client Templates</a>
   </aside>
 
@@ -331,12 +332,12 @@ footer {
     <h1 id="part1">Part 1: Executive Overview</h1>
 
     <h2 id="what-is">What Is Chimera Secured?</h2>
-    <p>Chimera Secured is a behavioral email security platform that detects Business Email Compromise (BEC) by analyzing <em>how</em> each person writes, not what they say. It builds a multi-dimensional behavioral fingerprint for every protected mailbox and flags emails that deviate from the owner's unconscious writing patterns — even when the email comes from the real, authenticated account.</p>
+    <p>Chimera Secured is a behavioral email security platform that detects Business Email Compromise (BEC) by analyzing <em>how</em> each person writes, not what they say. It builds a multi-dimensional behavioral fingerprint for every protected mailbox and flags outbound emails that deviate from the owner's unconscious writing patterns — even when the email comes from the real, authenticated account.</p>
     <p>Unlike traditional email security tools that rely on known threat signatures, reputation scoring, or content-keyword rules, Chimera Secured catches attacks that use legitimate credentials and clean language — the exact scenario that BEC exploits.</p>
 
     <h2 id="why-msps">Why MSPs Should Offer This</h2>
     <ul>
-      <li><strong>BEC is the #1 cybercrime by dollar loss:</strong> $2.9B reported to FBI IC3 in 2023 alone.</li>
+      <li><strong>BEC is the #1 cybercrime by dollar loss:</strong> $3.0B reported to FBI IC3 in 2025 alone.</li>
       <li><strong>Traditional SEGs and DMARC don't catch account-takeover BEC</strong> — the attacker is inside the mailbox.</li>
       <li><strong>Runs inside the customer's M365 tenant.</strong> Email bodies never leave their environment, eliminating the most common objection to third-party email scanning.</li>
       <li><strong>Recurring revenue model:</strong> Per-mailbox monthly licensing with tiered pricing for MSP partners.</li>
@@ -356,7 +357,7 @@ footer {
       <div class="phase-card">
         <span class="phase-num">Phase 2</span>
         <h4>Shadow Mode</h4>
-        <p>Chimera scores every inbound email silently. No user-visible actions. MSP reviews detection dashboard.</p>
+        <p>Chimera scores every outbound email silently. No user-visible actions. MSP reviews detection dashboard.</p>
         <div class="phase-week">Weeks 2–4</div>
       </div>
       <div class="phase-card">
@@ -413,18 +414,15 @@ footer {
     <h2 id="step-by-step">Step-by-Step Deployment</h2>
 
     <h3>Step 1: Register the Azure AD Application</h3>
-    <p>Chimera Secured requires an Azure AD app registration to read email metadata and sent-mail history via the Microsoft Graph API.</p>
+    <p>Chimera Secured requires an Azure AD app registration to read outbound email history via the Microsoft Graph API.</p>
 
     <table>
       <tr><th>Permission</th><th>Type</th><th>Purpose</th></tr>
-      <tr><td><code>Mail.Read</code></td><td>Application</td><td>Read sent-mail history for behavioral profile enrollment.</td></tr>
-      <tr><td><code>Mail.ReadBasic</code></td><td>Application</td><td>Read message metadata for session-anomaly detection.</td></tr>
-      <tr><td><code>User.Read.All</code></td><td>Application</td><td>Resolve mailbox ownership and directory lookups.</td></tr>
-      <tr><td><code>MailboxSettings.Read</code></td><td>Application</td><td>Read mailbox config for send-time pattern baselines.</td></tr>
+      <tr><td><code>Mail.Read</code></td><td>Application</td><td>Read sent-mail history for behavioral profile enrollment and ongoing outbound email scoring.</td></tr>
     </table>
 
     <div class="callout">
-      <p><strong>Important:</strong> The Mail.Read permission is used exclusively during the one-time enrollment phase. After enrollment completes, the system operates on real-time mail-flow events and does not re-read historical mailbox contents.</p>
+      <p><strong>Important:</strong> Only the <code>Mail.Read</code> application-level permission is required, admin-consented by a Global Admin. The system reads sent-mail history during enrollment and monitors outbound mail flow for scoring. Email bodies are processed in memory and never persisted or transmitted outside the tenant.</p>
     </div>
 
     <h3>Step 2: Deploy the Analysis Container</h3>
@@ -439,14 +437,17 @@ footer {
     <h3>Step 3: Environment Configuration</h3>
     <table>
       <tr><th>Variable</th><th>Required</th><th>Description</th></tr>
-      <tr><td><code>TENANT_ID</code></td><td>Yes</td><td>The customer's Azure AD tenant ID.</td></tr>
-      <tr><td><code>CLIENT_ID</code></td><td>Yes</td><td>The app registration's Application (client) ID.</td></tr>
-      <tr><td><code>CLIENT_SECRET</code></td><td>Yes</td><td>The app registration's client secret. Rotate every 90 days.</td></tr>
+      <tr><td><code>AZURE_TENANT_ID</code></td><td>Yes</td><td>The customer's Azure AD tenant ID.</td></tr>
+      <tr><td><code>AZURE_CLIENT_ID</code></td><td>Yes</td><td>The app registration's Application (client) ID.</td></tr>
+      <tr><td><code>AZURE_CLIENT_SECRET</code></td><td>Yes</td><td>The app registration's client secret. Rotate every 90 days.</td></tr>
+      <tr><td><code>CPA_API_KEY</code></td><td>Yes</td><td>API key for authenticating requests to the analysis engine.</td></tr>
       <tr><td><code>DATABASE_URL</code></td><td>Yes</td><td>Connection string for the local profile database.</td></tr>
-      <tr><td><code>CPA_MIRROR_URL</code></td><td>Optional</td><td>Chimera Cloud endpoint for anonymized fingerprint mirroring.</td></tr>
-      <tr><td><code>CPA_MIRROR_API_KEY</code></td><td>Optional</td><td>API key for the mirror endpoint.</td></tr>
+      <tr><td><code>CPA_DATA_DIR</code></td><td>Optional</td><td>Directory for persistent data storage. Default: <code>./data</code></td></tr>
+      <tr><td><code>CPA_ARTIFACTS_DIR</code></td><td>Optional</td><td>Directory for model artifacts. Default: <code>./artifacts</code></td></tr>
       <tr><td><code>CPA_LOG_LEVEL</code></td><td>Optional</td><td>DEBUG, INFO (default), WARNING, ERROR.</td></tr>
       <tr><td><code>CPA_MAX_ENROLL_EMAILS</code></td><td>Optional</td><td>Max sent emails per user during enrollment. Default: 2000.</td></tr>
+      <tr><td><code>SCORER_PORT</code></td><td>Optional</td><td>Port for the scoring service. Default: 8500.</td></tr>
+      <tr><td><code>SCORER_MODE</code></td><td>Optional</td><td>Pilot phase mode: <code>shadow</code> (default), <code>warn</code>, or <code>enforce</code>.</td></tr>
     </table>
 
     <h3>Step 4: Enroll Initial Mailboxes</h3>
@@ -459,7 +460,7 @@ footer {
     </ul>
 
     <div class="callout callout-success">
-      <p><strong>Recommended pilot size:</strong> 10–50 mailboxes. Large enough to validate detection accuracy across writing styles, small enough to manage hands-on during the pilot.</p>
+      <p><strong>Recommended pilot size:</strong> 5–10 mailboxes. Focused enough for hands-on management during the pilot, with enough diversity to validate detection across different writing styles.</p>
     </div>
 
     <p>Enrollment is triggered per-mailbox via the admin dashboard or API. The system reads the user's sent-mail history, builds a multi-dimensional behavioral profile, then discards the raw email content. Only the abstract behavioral fingerprint is retained. Enrollment takes 30–120 seconds per mailbox.</p>
@@ -469,7 +470,7 @@ footer {
       <li>Open the admin dashboard and confirm all enrolled mailboxes show "Profile Active" status.</li>
       <li>Send a test email from an enrolled mailbox and confirm it appears in the scoring log.</li>
       <li>Confirm that no mail-flow disruption has occurred — Chimera operates in read-only mode.</li>
-      <li>Review the <code>/health</code> endpoint: verify <code>db_healthy=true</code> and <code>background_corpus_size > 0</code>.</li>
+      <li>Review the <code>/health</code> endpoint: verify <code>db_healthy=true</code> and all services report ready.</li>
     </ol>
 
     <!-- ====== PART 3 ====== -->
@@ -478,13 +479,13 @@ footer {
     <h2 id="dashboard">Dashboard Overview</h2>
 
     <h3>Detection Feed</h3>
-    <p>A real-time stream of scored emails. Each entry shows: sender, recipient, authenticity score (0–1.0), confidence level, which analysis layer(s) fired, and the content-risk classification.</p>
+    <p>A real-time stream of scored outbound emails. Each entry shows: sender, recipient, authenticity score (0–1.0), confidence level, which analysis layer(s) fired, and the content-risk classification.</p>
 
     <h3>Profile Health</h3>
-    <p>Per-mailbox view showing: profile version, training email count, coverage across communication tiers (formal/standard/casual), last-updated timestamp, and any warnings.</p>
+    <p>Per-mailbox view showing: profile version, training email count, coverage across formality contexts (formal/standard/casual), last-updated timestamp, and any warnings.</p>
 
     <h3>Relationship Labels</h3>
-    <p>The auto-classification system assigns each recipient a communication tier. The labeling queue lets the MSP or customer security team review and override these assignments to improve detection accuracy.</p>
+    <p>The auto-classification system assigns each recipient a formality context. The labeling queue lets the MSP or customer security team review and override these assignments to improve detection accuracy.</p>
 
     <h2 id="weekly-cadence">Weekly Pilot Review Cadence</h2>
 
@@ -533,7 +534,7 @@ footer {
     <p>A pilot that only runs in shadow mode and waits for a real attack proves nothing. Chimera Secured provides structured testing scenarios that demonstrate detection capability using controlled, safe simulations.</p>
 
     <h2 id="test1">Test 1: Baseline Verification</h2>
-    <p><strong>Purpose:</strong> Confirm that legitimate emails from enrolled users score high (&gt; 0.7) with good confidence.</p>
+    <p><strong>Purpose:</strong> Confirm that legitimate outbound emails from enrolled users score high (&gt; 0.7) with good confidence.</p>
     <ol>
       <li>Select 5 enrolled mailboxes with "Profile Active" status.</li>
       <li>Have each user send 3 normal business emails to different recipients.</li>
@@ -567,10 +568,10 @@ footer {
     </ol>
 
     <table>
-      <tr><th>Attack Tier</th><th>Description</th><th>Expected Detection</th></tr>
-      <tr><td>Tier 1: Generic</td><td>Standard BEC template. No personalization.</td><td>&gt; 99%</td></tr>
-      <tr><td>Tier 2: Context-Aware</td><td>Uses target's role, company, recent activity.</td><td>&gt; 95%</td></tr>
-      <tr><td>Tier 3: Style-Mimicking</td><td>AI-generated content mimicking target's style.</td><td>&gt; 88%</td></tr>
+      <tr><th>Attack Tier</th><th>Description</th><th>Expected Result</th></tr>
+      <tr><td>Tier 1: Generic</td><td>Standard BEC template. No personalization.</td><td>Strong detection — high confidence flag</td></tr>
+      <tr><td>Tier 2: Context-Aware</td><td>Uses target's role, company, recent activity.</td><td>Reliable detection — medium-high confidence flag</td></tr>
+      <tr><td>Tier 3: Style-Mimicking</td><td>AI-generated content mimicking target's style.</td><td>Detection with lower confidence — multiple layers contribute</td></tr>
     </table>
 
     <h2 id="test4">Test 4: False-Positive Stress Test</h2>
@@ -583,7 +584,7 @@ footer {
       <li>An email to a brand-new recipient not in training history.</li>
     </ul>
     <div class="callout callout-success">
-      <p><strong>Expected:</strong> Short emails return lower confidence (system knows it has less signal). Emotional-shift emails may score slightly lower but remain above alert threshold. New-recipient emails use fallback tier and should still score &gt; 0.6.</p>
+      <p><strong>Expected:</strong> Short emails return lower confidence (system knows it has less signal). Emotional-shift emails may score slightly lower but remain above alert threshold. New-recipient emails use fallback formality context and should still score &gt; 0.6.</p>
     </div>
 
     <h3>Interpreting Results</h3>
@@ -599,16 +600,16 @@ footer {
     <h1 id="part5">Part 5: Technical Appendix</h1>
 
     <h2 id="api">API Reference</h2>
-    <p>All endpoints run inside the customer's tenant boundary.</p>
+    <p>All endpoints run inside the customer's tenant boundary. The analysis engine runs on port 8400; the scoring service runs on port 8500.</p>
 
     <table>
       <tr><th>Endpoint</th><th>Method</th><th>Purpose</th></tr>
       <tr><td><code>/health</code></td><td>GET</td><td>Container and database health check.</td></tr>
       <tr><td><code>/enroll</code></td><td>POST</td><td>Build or refresh a behavioral profile for one user.</td></tr>
-      <tr><td><code>/score</code></td><td>POST</td><td>Score one email against a user's behavioral profile.</td></tr>
-      <tr><td><code>/cpp-status</code></td><td>GET</td><td>Query a user's profile metadata and mirror state.</td></tr>
+      <tr><td><code>/score</code></td><td>POST</td><td>Score one email against a user's behavioral profile. Returns <code>p_authentic</code> (0–1) and <code>confidence</code> (0–1).</td></tr>
+      <tr><td><code>/profile-status</code></td><td>GET</td><td>Query a user's behavioral profile metadata.</td></tr>
       <tr><td><code>/labeling-queue</code></td><td>GET</td><td>Retrieve recipient classification queue for review.</td></tr>
-      <tr><td><code>/label</code></td><td>POST</td><td>Submit or override a communication-tier label.</td></tr>
+      <tr><td><code>/label</code></td><td>POST</td><td>Submit or override a formality-context label.</td></tr>
       <tr><td><code>/labeling-progress</code></td><td>GET</td><td>Summary stats on labeling completion.</td></tr>
     </table>
 
@@ -616,7 +617,7 @@ footer {
     <table>
       <tr><th>Data Type</th><th>Location</th><th>Crosses Boundary?</th></tr>
       <tr><td>Email bodies</td><td>Customer M365 tenant</td><td>Never</td></tr>
-      <tr><td>Behavioral profiles</td><td>Customer container + optional Cloud mirror</td><td>Fingerprint only (if enabled)</td></tr>
+      <tr><td>Behavioral profiles</td><td>Customer container (local storage)</td><td>Never</td></tr>
       <tr><td>Relationship labels</td><td>Customer container (local DB)</td><td>Never</td></tr>
       <tr><td>Detection scores</td><td>Customer container (local DB)</td><td>Never</td></tr>
       <tr><td>Anonymized signals</td><td>Chimera Cloud (opt-in only)</td><td>Yes (anonymized, no content)</td></tr>
@@ -629,7 +630,8 @@ footer {
       <tr><td>Minimum RAM</td><td>512 MB</td></tr>
       <tr><td>Recommended RAM</td><td>2 GB (1000+ mailboxes)</td></tr>
       <tr><td>Disk per mailbox</td><td>~5 MB</td></tr>
-      <tr><td>Inbound port</td><td>8000 (place behind reverse proxy with TLS)</td></tr>
+      <tr><td>Analysis engine port</td><td>8400 (place behind reverse proxy with TLS)</td></tr>
+      <tr><td>Scorer port</td><td>8500</td></tr>
     </table>
 
     <h2 id="troubleshooting">Troubleshooting</h2>
@@ -641,6 +643,27 @@ footer {
       <tr><td>High false-positive rate</td><td>Low training volume</td><td>Re-enroll with more history. Review labels.</td></tr>
       <tr><td>Scores not appearing</td><td>Mail-flow hook disconnected</td><td>Verify app permissions and event subscription.</td></tr>
     </table>
+
+    <h2 id="support">Pilot Support</h2>
+    <p>During your pilot, you have direct access to our AI-powered support agent for any technical or operational questions.</p>
+
+    <div class="callout callout-success">
+      <p><strong>Call Pilot Support:</strong> <a href="tel:+17759774568" style="color: var(--accent); font-weight: 700; font-family: var(--mono);">(775) 977-4568</a></p>
+      <p style="margin-top: 8px;">Our conversational AI agent, Josh, is available to answer questions about deployment, configuration, scoring interpretation, troubleshooting, and pilot operations. Josh has full knowledge of the Chimera Secured platform and can walk you through any step of the pilot process.</p>
+    </div>
+
+    <p>Josh can help with:</p>
+    <ul>
+      <li>Azure AD app registration and permissions setup.</li>
+      <li>Environment variable configuration and container deployment.</li>
+      <li>Interpreting authenticity scores and confidence values.</li>
+      <li>Troubleshooting enrollment, scoring, or connectivity issues.</li>
+      <li>Understanding pilot phases (shadow, warn, enforce) and how to transition between them.</li>
+      <li>Explaining data sovereignty and how email content stays within the tenant.</li>
+      <li>Webhook and PSA integration guidance.</li>
+    </ul>
+
+    <p>For issues that require hands-on engineering support or fall outside Josh's scope, he'll escalate directly to the Chimera Secured engineering team with full context.</p>
 
     <!-- ====== TEMPLATES ====== -->
     <h1 id="templates">Client-Facing Templates</h1>
@@ -654,6 +677,7 @@ footer {
       <p>Here's what you need to know about the pilot:</p>
       <ul>
         <li>It runs entirely inside your M365 tenant. Your email content never leaves your environment.</li>
+        <li>It analyzes outbound email only — it watches how your people write, not what they receive.</li>
         <li>It starts in shadow mode — silent observation only. No emails will be blocked, flagged, or delayed.</li>
         <li>We'll monitor results for 4–6 weeks and share a summary report.</li>
         <li>If results meet success criteria, we'll discuss options for ongoing protection.</li>
@@ -687,7 +711,7 @@ footer {
         <tr><td>Avg authenticity score</td><td>[x.xx]</td><td>&gt; 0.75</td><td>[On Track / Review]</td></tr>
         <tr><td>False positives</td><td>[number]</td><td>&lt; 2%</td><td>[On Track / Above]</td></tr>
         <tr><td>Profiles active</td><td>[x/y]</td><td>80%+</td><td>[On Track / Below]</td></tr>
-        <tr><td>Simulated attacks detected</td><td>[x/y]</td><td>100% T1, 95% T2</td><td>[On Track / Review]</td></tr>
+        <tr><td>Simulated attacks detected</td><td>[x/y]</td><td>All tiers flagged</td><td>[On Track / Review]</td></tr>
       </table>
       <p><strong>Observations:</strong> [Note anomalies, interesting detections, or patterns.]</p>
       <p><strong>Actions for Next Week:</strong> [Adjustments, re-enrollments, threshold changes.]</p>
@@ -701,9 +725,9 @@ footer {
         <tr><th>Criterion</th><th>Target</th><th>Actual</th><th>Pass?</th></tr>
         <tr><td>False-positive rate</td><td>&lt; 2%</td><td></td><td></td></tr>
         <tr><td>Profiles active</td><td>&gt; 80% enrolled</td><td></td><td></td></tr>
-        <tr><td>Tier 1 attack detected</td><td>100%</td><td></td><td></td></tr>
-        <tr><td>Tier 2 attack detected</td><td>&gt; 95%</td><td></td><td></td></tr>
-        <tr><td>Tier 3 attack detected</td><td>&gt; 88%</td><td></td><td></td></tr>
+        <tr><td>Tier 1 attack detected</td><td>Flagged</td><td></td><td></td></tr>
+        <tr><td>Tier 2 attack detected</td><td>Flagged</td><td></td><td></td></tr>
+        <tr><td>Tier 3 attack detected</td><td>Flagged</td><td></td><td></td></tr>
         <tr><td>Alert quality confirmed</td><td>SOC sign-off</td><td></td><td></td></tr>
         <tr><td>Data sovereignty</td><td>Zero bodies cross boundary</td><td></td><td></td></tr>
         <tr><td>No mail-flow disruption</td><td>Zero delivery issues</td><td></td><td></td></tr>
@@ -750,5 +774,10 @@ function updateToc() {
 window.addEventListener('scroll', updateToc);
 updateToc();
 </script>
+
+<!-- Chimera Secured Pilot Support Chat Widget -->
+<elevenlabs-convai agent-id="agent_2001kqzb0d4sef58ggg60xwa7jd9"></elevenlabs-convai>
+<script src="https://elevenlabs.io/convai-widget/index.js" async type="text/javascript"></script>
+
 </body>
 </html>
